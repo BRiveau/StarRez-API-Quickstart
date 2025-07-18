@@ -10,12 +10,6 @@ using System.Text;
 using System.Net.Mime;
 using Newtonsoft.Json;
 
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddOpenApi();
-
-var app = builder.Build();
-
 // Define auth schemes for API (the StarRez API uses Basic authentication)
 OpenApiSecurityScheme[] authSchemes = [
         new OpenApiSecurityScheme
@@ -33,7 +27,41 @@ OpenApiSecurityScheme[] authSchemes = [
         },
 ];
 
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi((options) =>
+{
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+            {
+                document.Info = new()
+                {
+                    Title = "Internal StarRez API",
+                    Version = "v1",
+                    Description = "API for customizing request/response logic when interacting with the StarRez API"
+                };
+
+                document.Components = new OpenApiComponents();
+                document.Components.SecuritySchemes = new Dictionary<string, OpenApiSecurityScheme>();
+
+                foreach (var authScheme in authSchemes)
+                {
+                    document.Components.SecuritySchemes.Add(authScheme.Scheme, authScheme);
+                    document.SecurityRequirements.Add(new OpenApiSecurityRequirement {
+              {
+                  authScheme,
+                  new List<string>()
+              }});
+                }
+                return Task.CompletedTask;
+            });
+
+    options.AddScalarTransformers();
+});
+
+var app = builder.Build();
+
 app.MapOpenApi();
+app.MapScalarApiReference();
 
 app.UseHttpsRedirection();
 

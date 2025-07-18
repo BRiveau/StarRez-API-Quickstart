@@ -59,11 +59,9 @@ builder.Services.AddReverseProxy()
                  {
                      await responseTransform.SetGatewayDocumentationServer();
                  }
-                 // Only add XSSI protection when request is being made by a frontend client
-                 else if (routeId != "scalarProxy" && routeId != "starrezDocumentation"
-                     && !((responseContext.HttpContext.Request.Headers.Authorization.ToString() ?? "").Contains("Bearer")
-                     || (responseContext.HttpContext.Request.Headers.Authorization.ToString() ?? "").Contains("Basic")))
+                 else
                  {
+                     // XSSI protection is only added when request contains header of "frontend" that is true
                      await responseTransform.AddXssiProtection();
                  }
              });
@@ -119,13 +117,13 @@ app.MapScalarApiReference("/docs", (options) =>
         var clusterDestinations = cluster.GetChildren().ToArray()[0].GetChildren();
         foreach (var destination in clusterDestinations)
         {
-            if (clusterName.Contains("API"))
+            if (clusterName == "StarRez API")
             {
-                options.AddDocument("v1", clusterName, $"{clusterName.Split(' ')[0].ToLower()}/docs");
-                if (clusterName == "StarRez API")
-                {
-                    options.AddDocument("v1", "StarRez API", $"{clusterName.Split(' ')[0].ToLower()}/documentation");
-                }
+                options.AddDocument("v1", "StarRez API", $"{clusterName.Split(' ')[0].ToLower()}/documentation");
+            }
+            else if (clusterName.Contains("API"))
+            {
+                options.AddDocument("v1", clusterName, $"{clusterName.Split(' ')[0].ToLower()}/docs"); // Ensure that there is a mapping between OpenAPI documentation and /docs for all API clusters
             }
         }
     }

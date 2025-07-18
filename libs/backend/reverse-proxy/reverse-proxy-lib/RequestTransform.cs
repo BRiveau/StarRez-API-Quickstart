@@ -75,9 +75,10 @@ public class RequestTransform
             var routePath = $"/{string.Join("/", (decodedQueryString ?? "").Split('/').Skip(3))}";
             switch (clusterUrl)
             {
-                default:
+                // Specify custom route configurations per route here
+                case "https://localhost:7050":
                     {
-                        // Specify custom route configurations per route here
+                        routePath = $"/starrez{routePath}";
                         break;
                     }
             }
