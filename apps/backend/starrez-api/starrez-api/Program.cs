@@ -219,6 +219,12 @@ async ([FromHeader] bool? dev) =>
                                             schemas[tableReader.Name].Properties[attributeName].Format = "date-time";
                                             break;
                                         }
+                                    case "date":
+                                        {
+                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
+                                            schemas[tableReader.Name].Properties[attributeName].Format = "date";
+                                            break;
+                                        }
                                     case "money":
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "number";
