@@ -48,7 +48,7 @@ public class ResponseTransform
         var reader = new OpenApiStreamReader();
         var document = reader.Read(this._responseBodyStream, out var diagnostic);
 
-        // Only conduct modification if not starrez native
+        // Only conduct modification if not StarRez API documentation
         document!.Servers = new List<OpenApiServer>();
         var appendPath = this._responseContext.HttpContext.Request.Path.ToString().Split('/')[1];
         document.Servers.Add(new OpenApiServer()

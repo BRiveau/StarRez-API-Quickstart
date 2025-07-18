@@ -31,16 +31,19 @@ builder.Services.AddReverseProxy()
               {
                   ReverseProxy.RequestTransform requestTransform = new ReverseProxy.RequestTransform(requestContext);
 
+                  // Properly handle requests made to the scalar proxy URL
                   if (routeId == "scalarProxy")
                   {
                       await requestTransform.ScalarProxy();
                   }
                   /* Only uncomment if implementing micro-service architecture and has proper authentication and authorization
+                  // Adds specified StarRez API authentication information to requests
                   else if (routeId == "starrezApi")
                   {
                       requestTransform.AddStarrezAuth();
                   }
                   */
+                  // Only log request body if HTTP method can contain a body (produces errors if this is not followed)
                   else if (requestContext.HttpContext.Request.Method != "GET"
                       && requestContext.HttpContext.Request.Method != "DELETE")
                   {
@@ -50,11 +53,14 @@ builder.Services.AddReverseProxy()
           builderContext.AddResponseTransform(async responseContext =>
              {
                  ReverseProxy.ResponseTransform responseTransform = new ReverseProxy.ResponseTransform(responseContext);
-                 if (routeId.Contains("Documentation") && routeId != "starrezNativeDocumentation")
+
+                 // Only customize OpenAPI documentation servers if using custom internal APIs
+                 if (routeId.Contains("Documentation") && routeId != "starrezDocumentation")
                  {
                      await responseTransform.SetGatewayDocumentationServer();
                  }
-                 else if (routeId != "scalarProxy" && routeId != "starrezNativeDocumentation"
+                 // Only add XSSI protection when request is being made by a frontend client
+                 else if (routeId != "scalarProxy" && routeId != "starrezDocumentation"
                      && !((responseContext.HttpContext.Request.Headers.Authorization.ToString() ?? "").Contains("Bearer")
                      || (responseContext.HttpContext.Request.Headers.Authorization.ToString() ?? "").Contains("Basic")))
                  {

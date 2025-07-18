@@ -11,7 +11,7 @@
       "executor": "@nx-dotnet/core:serve",
       "dependsOn": [
         {
-          "projects": [],
+          "projects": ["starrez-api"],
           "target": "serve"
         }
       ]
@@ -19,5 +19,6 @@
     "publish": {
       "executor": "@nx-dotnet/core:publish"
     }
-  }
+  },
+  "implicitDependencies": ["starrez-api"]
 }
