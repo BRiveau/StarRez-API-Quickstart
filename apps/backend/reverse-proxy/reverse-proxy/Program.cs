@@ -1,6 +1,8 @@
 using Yarp.ReverseProxy.Transforms;
 using Yarp.ReverseProxy.Management;
 using Scalar.AspNetCore;
+using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +22,20 @@ builder.Services.AddReverseProxy()
       handler.AutomaticDecompression = System.Net.DecompressionMethods.All;
   })
   .LoadFromConfig(reverseProxyConfig);
+
+// Configure Logging
+string logFilePath = $"../../logs/{DateTime.Now.ToString("MM-dd-yyyy")}-reverse-proxy.log"; // Sets output filename and directory
+string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"; // Uses Serilog format to configure logging output styling
+Log.Logger = new LoggerConfiguration()
+  .Filter.ByIncludingOnly(le => (le.Level >= LogEventLevel.Warning)
+      || (le.Properties.ContainsKey("Custom")
+        && bool.Parse(le.Properties["Custom"].ToString())))
+  .WriteTo.Console(outputTemplate: outputTemplate)
+  .WriteTo.File(logFilePath,
+      outputTemplate: outputTemplate)
+  .CreateLogger();
+builder.Services.AddSerilog();
+
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -72,29 +88,29 @@ app.MapScalarApiReference("/docs", (options) =>
 });
 
 app.UseHttpsRedirection();
-
-var summaries = new[]
+app.MapReverseProxy(proxyPipeline =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    proxyPipeline.Use(async (context, next) =>
+    {
+        var proxyFeature = context.GetReverseProxyFeature();
+        var clusterId = proxyFeature.Route.Cluster?.ClusterId;
+        var request = context.Request;
+        var queryString = request.QueryString;
+        var authorization = request.Headers.Authorization.ToString();
+        var requestHeaders = request.Headers.ToDictionary();
+        bool isDev = requestHeaders.ContainsKey("dev") && bool.Parse(requestHeaders["dev"]!);
+        var userClaims = context.User.Claims.ToDictionary(claim => claim.Type, claim => claim.Value);
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+        // Request Logging
+        Log.ForContext("Custom", true).Information($"{"User"} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
 
-app.Run();
+        await next();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+        var response = context.Response;
+
+        // Response Logging
+        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {"User"} received response of {response.StatusCode}");
+    });
+});
+
+await app.RunAsync();

@@ -9,5 +9,9 @@
     <PackageReference Include="Scalar.AspNetCore" Version="2.4.14"></PackageReference>
     <PackageReference Include="Scalar.AspNetCore.Microsoft" Version="2.4.14"></PackageReference>
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0"></PackageReference>
+    <PackageReference Include="Serilog" Version="4.2.0"></PackageReference>
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0"></PackageReference>
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"></PackageReference>
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0"></PackageReference>
   </ItemGroup>
 </Project>
