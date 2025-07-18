@@ -2,10 +2,12 @@
   "name": "@starrez-api-quickstart/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "prepare": "nx g @nx-dotnet/core:restore"
+  },
   "private": true,
-  "dependencies": {},
   "devDependencies": {
+    "@nx-dotnet/core": "^3.0.0",
     "@nx/js": "21.2.4",
     "@swc-node/register": "~1.9.1",
     "@swc/core": "~1.5.7",
