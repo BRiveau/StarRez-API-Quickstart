@@ -1,5 +1,5 @@
 {
-  "name": "apps-backend-reverse-proxy-reverse-proxy",
+  "name": "reverse-proxy",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/backend/reverse-proxy/reverse-proxy",
