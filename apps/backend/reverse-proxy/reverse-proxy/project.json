@@ -5,5 +5,19 @@
   "sourceRoot": "apps/backend/reverse-proxy/reverse-proxy",
   "tags": [],
   "// targets": "to see all targets run: nx show project apps-backend-reverse-proxy-reverse-proxy --web",
-  "targets": {}
+  "targets": {
+    "serve": {
+      "continuous": true,
+      "executor": "@nx-dotnet/core:serve",
+      "dependsOn": [
+        {
+          "projects": [],
+          "target": "serve"
+        }
+      ]
+    },
+    "publish": {
+      "executor": "@nx-dotnet/core:publish"
+    }
+  }
 }
