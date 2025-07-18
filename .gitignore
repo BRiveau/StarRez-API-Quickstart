@@ -45,3 +45,7 @@ Thumbs.db
 
 # Log Files
 logs
+
+# Environment Files
+.env
+.env.keys

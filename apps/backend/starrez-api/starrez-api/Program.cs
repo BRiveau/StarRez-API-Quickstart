@@ -39,8 +39,8 @@ app.UseHttpsRedirection();
 
 // Configure HTTP clients
 string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
-string starrezApiUrl = "https://uri.starrezhousing.com/StarRezRest/services";
-string starrezDevApiUrl = "https://uri.starrezhousing.com/StarRezRestDev/services";
+string starrezApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services";
+string starrezDevApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services";
 HttpClientHandler handler = new HttpClientHandler();
 if ((Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "") == "Development")
 {

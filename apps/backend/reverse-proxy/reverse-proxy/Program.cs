@@ -122,9 +122,9 @@ app.MapScalarApiReference("/docs", (options) =>
             if (clusterName.Contains("API"))
             {
                 options.AddDocument("v1", clusterName, $"{clusterName.Split(' ')[0].ToLower()}/docs");
-                if (clusterName == "StarRez Internal API")
+                if (clusterName == "StarRez API")
                 {
-                    options.AddDocument("v1", "StarRez Native API", $"{clusterName.Split(' ')[0].ToLower()}/native/docs");
+                    options.AddDocument("v1", "StarRez API", $"{clusterName.Split(' ')[0].ToLower()}/documentation");
                 }
             }
         }
