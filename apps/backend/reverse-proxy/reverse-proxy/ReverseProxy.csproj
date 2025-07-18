@@ -14,4 +14,8 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"></PackageReference>
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0"></PackageReference>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../libs/backend/reverse-proxy/reverse-proxy-lib/ReverseProxyLib.csproj"></ProjectReference>
+    <ProjectReference Include="../../../../libs/backend/starrez/starrez-lib/StarRez.csproj"></ProjectReference>
+  </ItemGroup>
 </Project>

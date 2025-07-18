@@ -3,6 +3,7 @@ using Yarp.ReverseProxy.Management;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
+using ReverseProxy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +22,46 @@ builder.Services.AddReverseProxy()
   {
       handler.AutomaticDecompression = System.Net.DecompressionMethods.All;
   })
-  .LoadFromConfig(reverseProxyConfig);
+  .LoadFromConfig(reverseProxyConfig)
+    .AddTransforms(builderContext =>
+      {
+          string routeId = builderContext.Route.RouteId;
+
+          builderContext.AddRequestTransform(async requestContext =>
+              {
+                  ReverseProxy.RequestTransform requestTransform = new ReverseProxy.RequestTransform(requestContext);
+
+                  if (routeId == "scalarProxy")
+                  {
+                      await requestTransform.ScalarProxy();
+                  }
+                  /* Only uncomment if implementing micro-service architecture and has proper authentication and authorization
+                  else if (routeId == "starrezApi")
+                  {
+                      requestTransform.AddStarrezAuth();
+                  }
+                  */
+                  else if (requestContext.HttpContext.Request.Method != "GET"
+                      && requestContext.HttpContext.Request.Method != "DELETE")
+                  {
+                      await requestTransform.LogRequestBody();
+                  }
+              });
+          builderContext.AddResponseTransform(async responseContext =>
+             {
+                 ReverseProxy.ResponseTransform responseTransform = new ReverseProxy.ResponseTransform(responseContext);
+                 if (routeId.Contains("Documentation") && routeId != "starrezNativeDocumentation")
+                 {
+                     await responseTransform.SetGatewayDocumentationServer();
+                 }
+                 else if (routeId != "scalarProxy" && routeId != "starrezNativeDocumentation"
+                     && !((responseContext.HttpContext.Request.Headers.Authorization.ToString() ?? "").Contains("Bearer")
+                     || (responseContext.HttpContext.Request.Headers.Authorization.ToString() ?? "").Contains("Basic")))
+                 {
+                     await responseTransform.AddXssiProtection();
+                 }
+             });
+      });
 
 // Configure Logging
 string logFilePath = $"../../logs/{DateTime.Now.ToString("MM-dd-yyyy")}-reverse-proxy.log"; // Sets output filename and directory
