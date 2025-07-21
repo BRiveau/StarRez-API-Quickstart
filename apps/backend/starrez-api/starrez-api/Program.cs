@@ -202,6 +202,31 @@ async ([FromHeader] bool? dev) =>
 
                     if (columnReader.HasAttributes)
                     {
+                        // Construct table references
+                        if (attributeName == "TableID")
+                        {
+                            schemas[tableReader.Name].Properties[attributeName].Description = "ID of element in Table specified in TableName";
+                        }
+                        else if (attributeName == "TableName")
+                        {
+                            schemas[tableReader.Name].Properties[attributeName].Description = "Name of table to be used for reference";
+                        }
+                        else if (attributeName.Contains("ID") &&
+                                tableReader.Name != attributeName.Replace("ID", "") &&
+                                attributeName.Length != 3)
+                        {
+                            schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
+                        }
+                        else if (attributeName.Contains("ID") &&
+                                attributeName.Length != 3)
+                        {
+                            schemas[tableReader.Name].Properties[attributeName].Description = $"Primary identification key for {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
+                        }
+                        else if (attributeName.Contains("Enum"))
+                        {
+                            schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName} table";
+                        }
+
                         for (int i = 0; i < columnReader.AttributeCount; i++)
                         {
                             columnReader.MoveToAttribute(i);
@@ -217,31 +242,67 @@ async ([FromHeader] bool? dev) =>
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "string";
                                             schemas[tableReader.Name].Properties[attributeName].Format = "date-time";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Date and time as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z";
                                             break;
                                         }
                                     case "date":
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "string";
                                             schemas[tableReader.Name].Properties[attributeName].Format = "date";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Date as defined by RFC 3339, section 5.6, for example, 2017-07-21";
+                                            break;
+                                        }
+                                    case "timestamp":
+                                        {
+                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
+                                            schemas[tableReader.Name].Properties[attributeName].Format = "time";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Time as defined by RFC 3339, section 5.6, for example, 17:32:28Z";
                                             break;
                                         }
                                     case "money":
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "number";
                                             schemas[tableReader.Name].Properties[attributeName].Format = "decimal";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "A fixed point decimal number of unspecified precision and range";
                                             break;
                                         }
-                                    case "short":
+                                    case "decimal":
                                         {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "integer";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "int16";
-
-                                            break;
+                                            goto case "money";
+                                        }
+                                    case "bigdecimal":
+                                        {
+                                            goto case "money";
                                         }
                                     case "binary":
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "string";
                                             schemas[tableReader.Name].Properties[attributeName].Format = "binary";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Any sequence of octets";
+                                            break;
+                                        }
+                                    case "byte":
+                                        {
+                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
+                                            schemas[tableReader.Name].Properties[attributeName].Format = "byte";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Base64 encoded data as defined by RFC4648, section 6";
+                                            break;
+                                        }
+                                    case "guid":
+                                        {
+                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
+                                            schemas[tableReader.Name].Properties[attributeName].Format = "guid";
+                                            break;
+                                        }
+                                    case "longstring":
+                                        {
+                                            goto case "binary";
+                                        }
+                                    case "short":
+                                        {
+                                            schemas[tableReader.Name].Properties[attributeName].Type = "integer";
+                                            schemas[tableReader.Name].Properties[attributeName].Format = "int16";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Signed 16-bit integer";
                                             break;
                                         }
                                     default:
@@ -249,6 +310,20 @@ async ([FromHeader] bool? dev) =>
                                             schemas[tableReader.Name].Properties[attributeName].Type = columnReader.Value.ToLower();
                                             break;
                                         }
+                                }
+
+                                if (attributeName.Contains("Email") || attributeName == "PortalAuthProviderUserID")
+                                {
+                                    schemas[tableReader.Name].Properties[attributeName].Type = "string";
+                                    schemas[tableReader.Name].Properties[attributeName].Format = "email";
+                                    schemas[tableReader.Name].Properties[attributeName].Description = "An email address as defined as Mailbox by RFC5321, section 2.3.11, for example, example@domain.com";
+                                }
+                                else if (attributeName == "Password")
+                                {
+                                    Console.WriteLine("Password");
+                                    schemas[tableReader.Name].Properties[attributeName].Type = "string";
+                                    schemas[tableReader.Name].Properties[attributeName].Format = "byte";
+                                    schemas[tableReader.Name].Properties[attributeName].Description = "Base64 encoded data as defined by RFC4648, section 6";
                                 }
                             }
                             else if (columnReader.Name == "size"
@@ -277,82 +352,6 @@ async ([FromHeader] bool? dev) =>
     sb.Append("}");
 
     return Results.Text(sb.ToString(), "application/json");
-
-    /*
-    var tableData = await tableResponse.Content.ReadAsStringAsync();
-    tableData = tableData.Replace("Tables>", "").Replace("<", "").Replace("/", "").Replace(" ", "").Replace("\n", "");
-    var tableNames = tableData.Split(">");
-    tableNames = tableNames.Where(name => name.Trim() != "").ToArray();
-
-    var sb = new StringBuilder();
-    var writer = new OpenApiJsonWriter(new StringWriter(sb));
-
-    // Initial sb setup
-    sb.Append("{");
-    foreach (var table in tableNames)
-    {
-        sb.Append($"\"{table}\":");
-        List<string> requiredAttributes = new List<string>();
-        schemas.Add(table, new OpenApiSchema());
-
-        var modelRequest = new HttpRequestMessage(HttpMethod.Get, $"{((dev ?? false) ? starrezDevApiUrl : starrezApiUrl)}/databaseinfo/columnlist/{table}.xml");
-        var modelResponse = await starrezClient.SendAsync(modelRequest);
-
-        var modelData = await modelResponse.Content.ReadAsStringAsync();
-        modelData = modelData.Replace($"{table}>", "").Replace("<", "").Replace("/", "").Replace(" ", "").Replace("NotFound.", "");
-        var modelAttributes = modelData.Trim().Split(">");
-        modelAttributes = modelAttributes.Where(name => name.Trim() != "").ToArray();
-        schemas[table].Type = "object";
-
-        foreach (var attribute in modelAttributes)
-        {
-            string attributeName = attribute.Split("type")[0];
-            string attributeType = attribute.Split("\"")[1].ToLower();
-            if (attribute.Contains("required=\"true\""))
-            {
-                requiredAttributes.Add(attributeName);
-            }
-
-            schemas[table].Properties.Add(attributeName, new OpenApiSchema());
-
-            if (attributeType.Contains("datetime"))
-            {
-                schemas[table].Properties[attributeName].Type = "string";
-                schemas[table].Properties[attributeName].Format = "datetime";
-            }
-            if (attributeType.Contains("money"))
-            {
-                schemas[table].Properties[attributeName].Type = "number";
-                schemas[table].Properties[attributeName].Format = "float";
-            }
-            else
-            {
-                schemas[table].Properties[attributeName].Type = attributeType;
-            }
-
-            if (attribute.Contains("allowNull=\"true\""))
-            {
-                schemas[table].Properties[attributeName].Nullable = true;
-            }
-        }
-
-        schemas[table].Required = new HashSet<string>(requiredAttributes);
-
-        schemas[table].SerializeAsV3(writer);
-        writer.Flush();
-
-        if (table != tableNames[tableNames.Length - 1])
-        {
-            sb.Append(",");
-        }
-        else
-        {
-            sb.Append("}");
-        }
-    }
-
-    return Results.Text(sb.ToString(), "application/json");
-    */
 }).WithDescription("Gets StarRez API models in OpenApi component scheme format")
     .WithTags("StarRez API Documentation")
     .Stable();
