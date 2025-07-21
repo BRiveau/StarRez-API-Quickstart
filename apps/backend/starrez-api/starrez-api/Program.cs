@@ -12,6 +12,7 @@ using Newtonsoft.Json;
 using System.Xml;
 using StarRez;
 using Microsoft.OpenApi.Any;
+using Newtonsoft.Json.Linq;
 
 // Define auth schemes for API (the StarRez API uses Basic authentication)
 OpenApiSecurityScheme[] authSchemes = [
@@ -111,7 +112,7 @@ async (HttpContext context, [FromHeader] bool? dev) =>
     var reader = new OpenApiStreamReader();
     var document = reader.Read(await openApiResponse.Content.ReadAsStreamAsync(), out var diagnostic);
 
-    // Modify document data
+    // Set development and production servers
     document!.Servers = new List<OpenApiServer>();
     document.Servers.Add(new OpenApiServer()
     {
@@ -130,12 +131,112 @@ async (HttpContext context, [FromHeader] bool? dev) =>
     modelsResponse.EnsureSuccessStatusCode();
 
     var modelsData = await modelsResponse.Content.ReadAsStringAsync();
-    Console.WriteLine(modelsData);
 
-    var rawSchema = JsonConvert.DeserializeObject<Dictionary<string, OpenApiSchema>>(modelsData);
+    var modelSchema = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(modelsData);
+
+    // Fix schema formatting
+    var finalSchemas = new Dictionary<string, OpenApiSchema>();
+
+    foreach (var model in modelSchema ?? [])
+    {
+        var modelName = model.Key;
+        var modelData = model.Value;
+        var schema = new OpenApiSchema();
+
+        if (modelData.TryGetValue("type", out var typeToken))
+        {
+            schema.Type = typeToken.Value<string>();
+        }
+
+        if (modelData.TryGetValue("format", out var formatToken))
+        {
+            schema.Format = formatToken.Value<string>();
+        }
+
+        if (modelData.TryGetValue("description", out var descToken))
+        {
+            schema.Description = descToken.Value<string>();
+        }
+
+        if (modelData.TryGetValue("required", out var reqToken) && reqToken is JArray)
+        {
+            schema.Required = ((JArray)reqToken).Select<JToken, string>(item =>
+                item.Value<string>() ?? ""
+            ).Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet();
+        }
+
+
+        if (modelData.TryGetValue("properties", out var modelProperties) &&
+        modelProperties is JObject propertiesObject)
+        {
+            schema.Properties = new Dictionary<string, OpenApiSchema>();
+            foreach (var property in propertiesObject)
+            {
+                var propertyName = property.Key;
+                var propertyData = property.Value as JObject;
+
+                var propertySchema = new OpenApiSchema();
+
+                if (propertyData?.TryGetValue("type", out var propType) ?? false)
+                {
+                    propertySchema.Type = propType.Value<string>();
+                }
+
+                if (propertyData?.TryGetValue("maxLength", out var propMaxLength) ?? false)
+                {
+                    propertySchema.MaxLength = propMaxLength.Value<int>();
+                }
+
+                if (propertyData?.TryGetValue("nullable", out var propNullable) ?? false)
+                {
+                    propertySchema.Nullable = propNullable.Value<bool>();
+                }
+
+                if (propertyData?.TryGetValue("format", out var propFormat) ?? false)
+                {
+                    propertySchema.Format = propFormat.Value<string>();
+                }
+
+                if (propertyData?.TryGetValue("description", out var propDesc) ?? false)
+                {
+                    propertySchema.Description = propDesc.Value<string>();
+                }
+
+                if (propertyData?.TryGetValue("enum", out var enumToken) ?? false &&
+                enumToken is JArray)
+                {
+                    propertySchema.Enum = ((JArray)enumToken).Select<JToken, IOpenApiAny>(item =>
+                     item.Type switch
+                        {
+                            JTokenType.Integer => new OpenApiInteger((int)item.Value<long>()),
+                            JTokenType.String => new OpenApiString(item.Value<string>()),
+                            _ => new OpenApiString(item.ToString())
+                        }).Cast<IOpenApiAny>().ToList();
+                }
+
+                if (propertyData?.TryGetValue("oneOf", out var typesToken) ?? false &&
+                typesToken is JArray)
+                {
+                    propertySchema.OneOf = ((JArray)typesToken)
+                        .Select(item =>
+                                new OpenApiSchema()
+                                {
+                                    Type = item["type"]?.Value<string>() ?? ""
+                                })
+                    .ToList();
+                }
+
+
+                schema.Properties[propertyName] = propertySchema;
+            }
+        }
+
+        finalSchemas[modelName] = schema;
+    }
+
     document.Components = new OpenApiComponents()
     {
-        Schemas = rawSchema,
+        Schemas = finalSchemas,
     };
 
     foreach (var authScheme in authSchemes)
@@ -369,7 +470,7 @@ async ([FromHeader] bool? dev) =>
                             foreach (var enumValue in (await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync())) ?? [])
                             {
                                 schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiInteger(enumValue.enumId));
-                                schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiString(enumValue.description));
+                                schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiString(enumValue.description.Replace(" ", "")));
                             }
                         }
 
