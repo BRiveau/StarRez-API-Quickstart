@@ -319,7 +319,7 @@ async ([FromHeader] bool? dev) =>
                         // Construct table references
                         if (attributeName == "TableID")
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Description = "ID of element in Table specified in TableName";
+                            schemas[tableReader.Name].Properties[attributeName].Description = "ID of element in specified Table";
                         }
                         else if (attributeName == "TableName")
                         {
