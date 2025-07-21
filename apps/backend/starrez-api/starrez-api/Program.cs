@@ -211,20 +211,22 @@ async ([FromHeader] bool? dev) =>
                         {
                             schemas[tableReader.Name].Properties[attributeName].Description = "Name of table to be used for reference";
                         }
-                        else if (attributeName.Contains("ID") &&
-                                tableReader.Name != attributeName.Replace("ID", "") &&
-                                attributeName.Length != 3)
+                        else if (attributeName.Length != 3 &&
+                                !attributeName.Contains("GUID") &&
+                                attributeName.Contains("ID") &&
+                                tableReader.Name != attributeName.Replace("ID", ""))
                         {
                             schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
                         }
-                        else if (attributeName.Contains("ID") &&
-                                attributeName.Length != 3)
+                        else if (attributeName.Length != 3 &&
+                                !attributeName.Contains("GUID") &&
+                                attributeName.Contains("ID"))
                         {
                             schemas[tableReader.Name].Properties[attributeName].Description = $"Primary identification key for {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
                         }
                         else if (attributeName.Contains("Enum"))
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName} table";
+                            schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName.Substring(attributeName.IndexOf('_') + 1)} table";
                         }
 
                         for (int i = 0; i < columnReader.AttributeCount; i++)
@@ -292,6 +294,7 @@ async ([FromHeader] bool? dev) =>
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "string";
                                             schemas[tableReader.Name].Properties[attributeName].Format = "guid";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "A Globally Unique Identifier, defined as UUID by RFC 9562, section 4, for example, f81d4fae-7dec-11d0-a765-00a0c91e6bf6";
                                             break;
                                         }
                                     case "longstring":
@@ -316,7 +319,7 @@ async ([FromHeader] bool? dev) =>
                                 {
                                     schemas[tableReader.Name].Properties[attributeName].Type = "string";
                                     schemas[tableReader.Name].Properties[attributeName].Format = "email";
-                                    schemas[tableReader.Name].Properties[attributeName].Description = "An email address as defined as Mailbox by RFC5321, section 2.3.11, for example, example@domain.com";
+                                    schemas[tableReader.Name].Properties[attributeName].Description = "An email address, defined as Mailbox by RFC5321, section 2.3.11, for example, example@domain.com";
                                 }
                                 else if (attributeName == "Password")
                                 {
