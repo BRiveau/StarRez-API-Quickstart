@@ -10,6 +10,8 @@ using System.Text;
 using System.Net.Mime;
 using Newtonsoft.Json;
 using System.Xml;
+using StarRez;
+using Microsoft.OpenApi.Any;
 
 // Define auth schemes for API (the StarRez API uses Basic authentication)
 OpenApiSecurityScheme[] authSchemes = [
@@ -29,6 +31,8 @@ OpenApiSecurityScheme[] authSchemes = [
 ];
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOutputCache();
 
 builder.Services.AddOpenApi((options) =>
 {
@@ -63,7 +67,7 @@ var app = builder.Build();
 
 app.MapOpenApi();
 app.MapScalarApiReference();
-
+app.UseOutputCache();
 app.UseHttpsRedirection();
 
 // Configure HTTP clients
@@ -123,10 +127,15 @@ async (HttpContext context, [FromHeader] bool? dev) =>
     var modelsRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models");
     modelsRequest.Headers.Add("dev", (dev ?? false).ToString());
     var modelsResponse = await client.SendAsync(modelsRequest);
+    modelsResponse.EnsureSuccessStatusCode();
 
+    var modelsData = await modelsResponse.Content.ReadAsStringAsync();
+    Console.WriteLine(modelsData);
+
+    var rawSchema = JsonConvert.DeserializeObject<Dictionary<string, OpenApiSchema>>(modelsData);
     document.Components = new OpenApiComponents()
     {
-        Schemas = JsonConvert.DeserializeObject<Dictionary<string, OpenApiSchema>>(await modelsResponse.Content.ReadAsStringAsync()),
+        Schemas = rawSchema,
     };
 
     foreach (var authScheme in authSchemes)
@@ -145,7 +154,8 @@ async (HttpContext context, [FromHeader] bool? dev) =>
     writer.Flush();
 
     return Results.Text(sb.ToString(), "application/json");
-}).WithDescription("Gets StarRez API documentation in OpenAPI format")
+}).CacheOutput()
+    .WithDescription("Gets StarRez API documentation in OpenAPI format")
     .WithTags("StarRez API Documentation")
     .Stable();
 
@@ -174,7 +184,8 @@ async ([FromHeader] bool? dev) =>
         await tableReader.MoveToContentAsync();
         while (await tableReader.ReadAsync())
         {
-            if (schemas.ContainsKey(tableReader.Name) || tableReader.Name == "Tables")
+            if (schemas.ContainsKey(tableReader.Name) ||
+                    tableReader.Name == "Tables")
             {
                 continue;
             }
@@ -192,7 +203,8 @@ async ([FromHeader] bool? dev) =>
                 await columnReader.MoveToContentAsync();
                 while (await columnReader.ReadAsync())
                 {
-                    if (schemas[tableReader.Name].Properties.ContainsKey(columnReader.Name) || tableReader.Name == columnReader.Name)
+                    if (schemas[tableReader.Name].Properties.ContainsKey(columnReader.Name) ||
+                            tableReader.Name == columnReader.Name)
                     {
                         continue;
                     }
@@ -200,6 +212,7 @@ async ([FromHeader] bool? dev) =>
                     string attributeName = columnReader.Name;
                     schemas[tableReader.Name].Properties.Add(attributeName, new OpenApiSchema());
 
+                    string enumName = attributeName.Substring(columnReader.Name.IndexOf('_') + 1);
                     if (columnReader.HasAttributes)
                     {
                         // Construct table references
@@ -223,10 +236,6 @@ async ([FromHeader] bool? dev) =>
                                 attributeName.Contains("ID"))
                         {
                             schemas[tableReader.Name].Properties[attributeName].Description = $"Primary identification key for {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
-                        }
-                        else if (attributeName.Contains("Enum"))
-                        {
-                            schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName.Substring(attributeName.IndexOf('_') + 1)} table";
                         }
 
                         for (int i = 0; i < columnReader.AttributeCount; i++)
@@ -304,8 +313,8 @@ async ([FromHeader] bool? dev) =>
                                     case "short":
                                         {
                                             schemas[tableReader.Name].Properties[attributeName].Type = "integer";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "int16";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Signed 16-bit integer";
+                                            schemas[tableReader.Name].Properties[attributeName].Format = "uint16";
+                                            schemas[tableReader.Name].Properties[attributeName].Description = "Unsigned 16-bit integer";
                                             break;
                                         }
                                     default:
@@ -321,13 +330,6 @@ async ([FromHeader] bool? dev) =>
                                     schemas[tableReader.Name].Properties[attributeName].Format = "email";
                                     schemas[tableReader.Name].Properties[attributeName].Description = "An email address, defined as Mailbox by RFC5321, section 2.3.11, for example, example@domain.com";
                                 }
-                                else if (attributeName == "Password")
-                                {
-                                    Console.WriteLine("Password");
-                                    schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                    schemas[tableReader.Name].Properties[attributeName].Format = "byte";
-                                    schemas[tableReader.Name].Properties[attributeName].Description = "Base64 encoded data as defined by RFC4648, section 6";
-                                }
                             }
                             else if (columnReader.Name == "size"
                                     && int.Parse(columnReader.Value) > 0)
@@ -337,6 +339,37 @@ async ([FromHeader] bool? dev) =>
                             else if (columnReader.Name == "allowNull")
                             {
                                 schemas[tableReader.Name].Properties[attributeName].Nullable = bool.Parse(columnReader.Value);
+                                if (schemas[tableReader.Name].Properties[attributeName].Enum.Count > 0)
+                                {
+                                    schemas[tableReader.Name].Properties[attributeName].Enum.Add(null);
+                                }
+                            }
+                        }
+
+                        if (!(enumName == "LockedUserReasonEnum" ||
+                          enumName.Contains("OneTimeCode")) &&
+                            schemas[tableReader.Name].Properties[attributeName].Enum.Count < 1 &&
+                            enumName.Contains("Enum"))
+                        {
+                            schemas[tableReader.Name].Properties[attributeName].Type = null;
+                            schemas[tableReader.Name].Properties[attributeName].OneOf.Add(new OpenApiSchema()
+                            {
+                                Type = "integer"
+                            });
+                            schemas[tableReader.Name].Properties[attributeName].OneOf.Add(new OpenApiSchema()
+                            {
+                                Type = "string"
+                            });
+
+                            var enumRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models/{enumName}");
+                            enumRequest.Headers.Add("dev", (dev ?? false).ToString());
+                            var enumResponse = await client.SendAsync(enumRequest);
+                            enumResponse.EnsureSuccessStatusCode();
+
+                            foreach (var enumValue in (await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync())) ?? [])
+                            {
+                                schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiInteger(enumValue.enumId));
+                                schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiString(enumValue.description));
                             }
                         }
 
@@ -352,10 +385,29 @@ async ([FromHeader] bool? dev) =>
     }
 
     sb.Remove(sb.Length - 1, 1);
-    sb.Append("}");
+    sb.Append("\n}");
 
     return Results.Text(sb.ToString(), "application/json");
-}).WithDescription("Gets StarRez API models in OpenApi component scheme format")
+}).CacheOutput()
+    .WithDescription("Gets StarRez API models in OpenApi component scheme format")
+    .WithTags("StarRez API Documentation")
+    .Stable();
+
+app.MapGet("/models/{enumType}",
+    [ProducesResponseType<StarRezEnum[]>(200)]
+async ([FromHeader] bool? dev,
+    string enumType) =>
+{
+    var enumRequestBody = new StringContent($"SELECT {enumType} AS enumId, Description AS description FROM {enumType}", UnicodeEncoding.UTF8, MediaTypeNames.Application.Json);
+    var enumRequest = new HttpRequestMessage(HttpMethod.Post, $"{((dev ?? false) ? starrezDevApiUrl : starrezApiUrl)}/query")
+    {
+        Content = enumRequestBody
+    };
+    var enumResponse = await starrezClient.SendAsync(enumRequest);
+    enumResponse.EnsureSuccessStatusCode();
+    return Results.Ok(await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync()));
+}).CacheOutput()
+    .WithDescription("Gets specified StarRez Enum information")
     .WithTags("StarRez API Documentation")
     .Stable();
 
