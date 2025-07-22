@@ -1,7 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.OpenApi.Models;
-using ApiDocumentation;
 using System.Net.Mime;
 
 namespace StarRez;
@@ -24,10 +23,8 @@ public class StarRezClient
         this.client.DefaultRequestHeaders.Remove("Accept");
         this.client.DefaultRequestHeaders.Add("Accept", "application/json");
 
-        /*
-        // Configures auth header when using a single API user/key and custom authentication logic
-         this.UpdateAuthHeader(Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
-         */
+        // Configures default auth header for StarRez documentation requests
+        this.UpdateAuthHeader(Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
     }
 
     /// <summary>
@@ -74,6 +71,42 @@ public class StarRezClient
     }
 
     /// <summary>
+    /// Replaces default HTTP methods with corrected methods
+    /// </summary>
+    public void CorrectHttpMethods(OpenApiDocument document)
+    {
+        foreach (var path in document.Paths)
+        {
+            if ((path.Key.Contains("databaseinfo") ||
+                    path.Key.Contains("attachment") ||
+                    path.Key.Contains("select") ||
+                    (path.Key.Contains("photo") &&
+                        !path.Key.Contains("set")) ||
+                    path.Key.Contains("test") ||
+                    path.Key.Contains("get")) &&
+                    path.Value.Operations.All(operation => operation.Value.RequestBody == null))
+            {
+                var pathData = path.Value.Operations[OperationType.Post];
+                path.Value.Operations.Remove(OperationType.Post);
+                path.Value.Operations.Add(OperationType.Get, pathData);
+            }
+            else if (path.Key.Contains("delete"))
+            {
+                var pathData = path.Value.Operations[OperationType.Post];
+                path.Value.Operations.Remove(OperationType.Post);
+                path.Value.Operations.Add(OperationType.Delete, pathData);
+            }
+            else if (path.Key.Contains("update"))
+            {
+                var pathData = path.Value.Operations[OperationType.Post];
+                path.Value.Operations.Remove(OperationType.Post);
+                path.Value.Operations.Add(OperationType.Patch, pathData);
+                path.Value.Operations.Add(OperationType.Put, pathData);
+            }
+        }
+    }
+
+    /// <summary>
     /// Makes an HTTP request to get all StarRez model definitions
     /// </summary>
     public async Task<string> GetStarRezModels(bool? dev)
@@ -97,6 +130,9 @@ public class StarRezClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    /// <summary>
+    /// Makes an HTTP request to get all StarRez attributes for the specified table
+    /// </summary>
     public async Task<Stream> GetStarRezTableAttributes(string tableName, bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/columnlist/{tableName}.xml");
@@ -106,7 +142,7 @@ public class StarRezClient
         return await response.Content.ReadAsStreamAsync();
     }
 
-    public async Task<Stream GetStarRezEnum(string enumName, bool? dev)
+    public async Task<Stream> GetStarRezEnum(string enumName, bool? dev)
     {
         var requestBody = new StringContent(
                 $"SELECT {enumName} AS enumId, Description AS description FROM {enumName}",

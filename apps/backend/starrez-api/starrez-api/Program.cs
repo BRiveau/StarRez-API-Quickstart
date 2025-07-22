@@ -95,6 +95,7 @@ async (HttpContext context, [FromHeader] bool? dev) =>
         ), out var diagnostic);
 
     starrezApiClient.AddStarRezServers(document);
+    starrezApiClient.CorrectHttpMethods(document);
 
     var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(
         await starrezApiClient.GetStarRezModels(dev));
