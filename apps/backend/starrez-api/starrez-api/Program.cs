@@ -73,6 +73,8 @@ app.UseHttpsRedirection();
 
 // Configure HTTP clients
 string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
+
+StarRezClient starrezApiClient = new StarRezClient();
 string starrezApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services";
 string starrezDevApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services";
 HttpClientHandler handler = new HttpClientHandler();
