@@ -101,10 +101,10 @@ app.MapGet("/documentation",
     [ProducesResponseType(200)]
 async (HttpContext context, [FromHeader] bool? dev) =>
 {
-    var reader = new OpenApiStreamReader();
-    var document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic) ?? new OpenApiDocument();
+    OpenApiStreamReader reader = new OpenApiStreamReader();
+    OpenApiDocument document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic);
 
-    starrezApiClient.AddStarRezServers(document ?? new OpenApiDocument());
+    starrezApiClient.AddStarRezServers(document);
 
     var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(await starrezApiClient.GetStarRezModels());
 
