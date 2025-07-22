@@ -30,6 +30,9 @@ public class ApiDocumentationGenerator
         return await response.Content.ReadAsStreamAsync();
     }
 
+    /// <summary>
+    /// Ensures that all schema properties are properly set (fixes problems with JSON deserialization)
+    /// </summary>
     public void FixSchemaFormatting(JObject schemaValue, OpenApiSchema schema)
     {
         if (schemaValue.TryGetValue("type", out var type))
@@ -87,6 +90,5 @@ enumToken is JArray)
                         })
             .ToList();
         }
-
     }
 }

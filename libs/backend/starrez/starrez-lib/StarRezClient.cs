@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using ApiDocumentation;
+using System.Net.Mime;
 
 namespace StarRez;
 
@@ -10,12 +11,10 @@ public class StarRezClient
     private Dictionary<string, string> starrezApiUrls = new Dictionary<string, string>();
     private string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
     private HttpClient client;
-    private ApiDocumentationGenerator apiDocumentationGenerator;
 
     public StarRezClient(HttpClient client)
     {
         this.client = client;
-        apiDocumentationGenerator = new ApiDocumentationGenerator(this.client);
 
         // Add production and development API URLs
         this.starrezApiUrls.Add("Production", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services");
@@ -48,13 +47,13 @@ public class StarRezClient
     /// <summary>
     /// Gets StarRez API documentation and converts it into OpenAPI format
     /// </summary>
-    public async Task<Stream> GetStarRezDocumentation(bool dev = false)
+    public async Task<string> GetStarRezDocumentation(bool? dev)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ? "Development" : "Production")].Replace("/services", "")}/swagger");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")].Replace("/services", "")}/swagger");
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        return await this.apiDocumentationGenerator.ConvertSwaggerToOpenApi(await response.Content.ReadAsStringAsync());
+        return await response.Content.ReadAsStringAsync();
     }
 
     /// <summary>
@@ -74,13 +73,54 @@ public class StarRezClient
         }
     }
 
-    public async Task<string> GetStarRezModels(bool dev = false)
+    /// <summary>
+    /// Makes an HTTP request to get all StarRez model definitions
+    /// </summary>
+    public async Task<string> GetStarRezModels(bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models");
-        request.Headers.Add("dev", dev.ToString());
+        request.Headers.Add("dev", (dev ?? false).ToString());
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
+    }
+
+    /// <summary>
+    /// Makes an HTTP request to get all StarRez tables
+    /// </summary>
+    public async Task<Stream> GetStarRezTables(bool? dev)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/tablelist.xml");
+        var response = await this.client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsStreamAsync();
+    }
+
+    public async Task<Stream> GetStarRezTableAttributes(string tableName, bool? dev)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/columnlist/{tableName}.xml");
+        var response = await this.client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsStreamAsync();
+    }
+
+    public async Task<Stream GetStarRezEnum(string enumName, bool? dev)
+    {
+        var requestBody = new StringContent(
+                $"SELECT {enumName} AS enumId, Description AS description FROM {enumName}",
+                UnicodeEncoding.UTF8,
+                MediaTypeNames.Application.Json);
+        var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/query")
+        {
+            Content = requestBody
+        };
+        var response = await this.client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStreamAsync();
     }
 
     /*

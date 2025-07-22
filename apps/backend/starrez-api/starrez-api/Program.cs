@@ -73,40 +73,31 @@ app.UseOutputCache();
 app.UseHttpsRedirection();
 
 // Configure HTTP clients
-string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
-
-string starrezApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services";
-string starrezDevApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services";
 HttpClientHandler handler = new HttpClientHandler();
 if ((Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "") == "Development")
 {
     handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
 }
-HttpClient client = new(handler) { BaseAddress = new Uri(apiUrl) };
+HttpClient client = new HttpClient(handler);
 // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKeyValidator.GetGatewayApiKey());
 
 StarRezClient starrezApiClient = new StarRezClient(client);
 ApiDocumentationGenerator apiDocumentationGenerator = new ApiDocumentationGenerator(client);
-HttpClient starrezClient = new HttpClient { BaseAddress = new Uri(starrezApiUrl) };
-starrezClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-        Convert.ToBase64String(
-          Encoding.ASCII.GetBytes(
-            $"{Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? ""}:{Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? ""}"
-          )
-        )
-);
-starrezClient.DefaultRequestHeaders.Add("Accept", "application/json");
 
 app.MapGet("/documentation",
     [ProducesResponseType(200)]
 async (HttpContext context, [FromHeader] bool? dev) =>
 {
     OpenApiStreamReader reader = new OpenApiStreamReader();
-    OpenApiDocument document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic);
+    OpenApiDocument document = reader.Read(
+        await apiDocumentationGenerator.ConvertSwaggerToOpenApi(
+            await starrezApiClient.GetStarRezDocumentation(dev)
+        ), out var diagnostic);
 
     starrezApiClient.AddStarRezServers(document);
 
-    var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(await starrezApiClient.GetStarRezModels());
+    var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(
+        await starrezApiClient.GetStarRezModels(dev));
 
     var formattedModels = new Dictionary<string, OpenApiSchema>();
 
@@ -125,7 +116,8 @@ async (HttpContext context, [FromHeader] bool? dev) =>
                 var propertyName = property.Key;
                 var propertySchema = new OpenApiSchema();
 
-                apiDocumentationGenerator.FixSchemaFormatting(property.Value as JObject ?? new JObject(), propertySchema);
+                apiDocumentationGenerator.FixSchemaFormatting(
+                    property.Value as JObject ?? new JObject(), propertySchema);
 
                 schema.Properties[propertyName] = propertySchema;
             }
@@ -175,8 +167,6 @@ async ([FromHeader] bool? dev) =>
     };
 
     var schemas = new Dictionary<string, OpenApiSchema>();
-    var tableRequest = new HttpRequestMessage(HttpMethod.Get, $"{((dev ?? false) ? starrezDevApiUrl : starrezApiUrl)}/databaseinfo/tablelist.xml");
-    var tableResponse = await starrezClient.SendAsync(tableRequest);
 
     var sb = new StringBuilder();
     var writer = new OpenApiJsonWriter(new StringWriter(sb));
@@ -184,7 +174,9 @@ async ([FromHeader] bool? dev) =>
     var enumValues = new Dictionary<string, StarRezEnum[]>();
 
     sb.Append("{");
-    using (XmlReader tableReader = XmlReader.Create(await tableResponse.Content.ReadAsStreamAsync(), xmlReaderSettings))
+    using (XmlReader tableReader = XmlReader.Create(
+                await starrezApiClient.GetStarRezTables(dev),
+                xmlReaderSettings))
     {
         await tableReader.MoveToContentAsync();
         while (await tableReader.ReadAsync())
@@ -200,10 +192,10 @@ async ([FromHeader] bool? dev) =>
             schemas.Add(tableReader.Name, new OpenApiSchema());
             schemas[tableReader.Name].Type = "object";
 
-            var modelRequest = new HttpRequestMessage(HttpMethod.Get, $"{((dev ?? false) ? starrezDevApiUrl : starrezApiUrl)}/databaseinfo/columnlist/{tableReader.Name}.xml");
-            var modelResponse = await starrezClient.SendAsync(modelRequest);
-
-            using (XmlReader columnReader = XmlReader.Create(await modelResponse.Content.ReadAsStreamAsync(), xmlReaderSettings))
+            using (XmlReader columnReader = XmlReader.Create(
+                        await starrezApiClient.GetStarRezTableAttributes(
+                            tableReader.Name, dev),
+                        xmlReaderSettings))
             {
                 await columnReader.MoveToContentAsync();
                 while (await columnReader.ReadAsync())
@@ -368,11 +360,9 @@ async ([FromHeader] bool? dev) =>
 
                             if (!enumValues.ContainsKey(enumName))
                             {
-                                var enumRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models/{enumName}");
-                                enumRequest.Headers.Add("dev", (dev ?? false).ToString());
-                                var enumResponse = await client.SendAsync(enumRequest);
-                                enumResponse.EnsureSuccessStatusCode();
-                                enumValues.Add(enumName, await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync()) ?? []);
+                                enumValues.Add(
+                                        enumName, await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(
+                                            await starrezApiClient.GetStarRezEnum(enumName, dev)) ?? []);
                             }
 
                             foreach (var enumValue in enumValues[enumName])
@@ -399,24 +389,6 @@ async ([FromHeader] bool? dev) =>
     return Results.Text(sb.ToString(), "application/json");
 }).CacheOutput()
     .WithDescription("Gets StarRez API models in OpenApi component scheme format")
-    .WithTags("StarRez API Documentation")
-    .Stable();
-
-app.MapGet("/models/{enumType}",
-    [ProducesResponseType<StarRezEnum[]>(200)]
-async ([FromHeader] bool? dev,
-    string enumType) =>
-{
-    var enumRequestBody = new StringContent($"SELECT {enumType} AS enumId, Description AS description FROM {enumType}", UnicodeEncoding.UTF8, MediaTypeNames.Application.Json);
-    var enumRequest = new HttpRequestMessage(HttpMethod.Post, $"{((dev ?? false) ? starrezDevApiUrl : starrezApiUrl)}/query")
-    {
-        Content = enumRequestBody
-    };
-    var enumResponse = await starrezClient.SendAsync(enumRequest);
-    enumResponse.EnsureSuccessStatusCode();
-    return Results.Ok(await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync()));
-}).CacheOutput()
-    .WithDescription("Gets specified StarRez Enum information")
     .WithTags("StarRez API Documentation")
     .Stable();
 
