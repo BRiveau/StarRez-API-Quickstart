@@ -279,6 +279,8 @@ async ([FromHeader] bool? dev) =>
     var sb = new StringBuilder();
     var writer = new OpenApiJsonWriter(new StringWriter(sb));
 
+    var enumValues = new Dictionary<string, StarRezEnum[]>();
+
     sb.Append("{");
     using (XmlReader tableReader = XmlReader.Create(await tableResponse.Content.ReadAsStreamAsync(), xmlReaderSettings))
     {
@@ -462,12 +464,16 @@ async ([FromHeader] bool? dev) =>
                                 Type = "string"
                             });
 
-                            var enumRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models/{enumName}");
-                            enumRequest.Headers.Add("dev", (dev ?? false).ToString());
-                            var enumResponse = await client.SendAsync(enumRequest);
-                            enumResponse.EnsureSuccessStatusCode();
+                            if (!enumValues.ContainsKey(enumName))
+                            {
+                                var enumRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models/{enumName}");
+                                enumRequest.Headers.Add("dev", (dev ?? false).ToString());
+                                var enumResponse = await client.SendAsync(enumRequest);
+                                enumResponse.EnsureSuccessStatusCode();
+                                enumValues.Add(enumName, await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync()) ?? []);
+                            }
 
-                            foreach (var enumValue in (await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(await enumResponse.Content.ReadAsStreamAsync())) ?? [])
+                            foreach (var enumValue in enumValues[enumName])
                             {
                                 schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiInteger(enumValue.enumId));
                                 schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiString(enumValue.description.Replace(" ", "")));
