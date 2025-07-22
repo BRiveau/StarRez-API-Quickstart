@@ -17,5 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../../libs/backend/starrez/starrez-lib/StarRezLib.csproj"></ProjectReference>
+    <ProjectReference Include="../../../../libs/backend/api-documentation/api-documentation/ApiDocumentation.csproj"></ProjectReference>
   </ItemGroup>
 </Project>

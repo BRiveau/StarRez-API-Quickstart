@@ -11,6 +11,7 @@ using System.Net.Mime;
 using Newtonsoft.Json;
 using System.Xml;
 using StarRez;
+using ApiDocumentation;
 using Microsoft.OpenApi.Any;
 using Newtonsoft.Json.Linq;
 
@@ -85,6 +86,7 @@ HttpClient client = new(handler) { BaseAddress = new Uri(apiUrl) };
 // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKeyValidator.GetGatewayApiKey());
 
 StarRezClient starrezApiClient = new StarRezClient(client);
+ApiDocumentationGenerator apiDocumentationGenerator = new ApiDocumentationGenerator(client);
 HttpClient starrezClient = new HttpClient { BaseAddress = new Uri(starrezApiUrl) };
 starrezClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
         Convert.ToBase64String(
@@ -100,124 +102,43 @@ app.MapGet("/documentation",
 async (HttpContext context, [FromHeader] bool? dev) =>
 {
     var reader = new OpenApiStreamReader();
-    var document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic);
+    var document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic) ?? new OpenApiDocument();
 
     starrezApiClient.AddStarRezServers(document ?? new OpenApiDocument());
 
-    var modelsRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models");
-    modelsRequest.Headers.Add("dev", (dev ?? false).ToString());
-    var modelsResponse = await client.SendAsync(modelsRequest);
-    modelsResponse.EnsureSuccessStatusCode();
+    var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(await starrezApiClient.GetStarRezModels());
 
-    var modelsData = await modelsResponse.Content.ReadAsStringAsync();
+    var formattedModels = new Dictionary<string, OpenApiSchema>();
 
-    var modelSchema = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(modelsData);
-
-    // Fix schema formatting
-    var finalSchemas = new Dictionary<string, OpenApiSchema>();
-
-    foreach (var model in modelSchema ?? [])
+    foreach (var model in models ?? [])
     {
         var modelName = model.Key;
-        var modelData = model.Value;
         var schema = new OpenApiSchema();
 
-        if (modelData.TryGetValue("type", out var typeToken))
-        {
-            schema.Type = typeToken.Value<string>();
-        }
+        apiDocumentationGenerator.FixSchemaFormatting(model.Value, schema);
 
-        if (modelData.TryGetValue("format", out var formatToken))
+        if (model.Value.TryGetValue("properties", out var modelProperties) &&
+            modelProperties is JObject properties)
         {
-            schema.Format = formatToken.Value<string>();
-        }
-
-        if (modelData.TryGetValue("description", out var descToken))
-        {
-            schema.Description = descToken.Value<string>();
-        }
-
-        if (modelData.TryGetValue("required", out var reqToken) && reqToken is JArray)
-        {
-            schema.Required = ((JArray)reqToken).Select<JToken, string>(item =>
-                item.Value<string>() ?? ""
-            ).Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet();
-        }
-
-
-        if (modelData.TryGetValue("properties", out var modelProperties) &&
-        modelProperties is JObject propertiesObject)
-        {
-            schema.Properties = new Dictionary<string, OpenApiSchema>();
-            foreach (var property in propertiesObject)
+            foreach (var property in properties)
             {
                 var propertyName = property.Key;
-                var propertyData = property.Value as JObject;
-
                 var propertySchema = new OpenApiSchema();
 
-                if (propertyData?.TryGetValue("type", out var propType) ?? false)
-                {
-                    propertySchema.Type = propType.Value<string>();
-                }
-
-                if (propertyData?.TryGetValue("maxLength", out var propMaxLength) ?? false)
-                {
-                    propertySchema.MaxLength = propMaxLength.Value<int>();
-                }
-
-                if (propertyData?.TryGetValue("nullable", out var propNullable) ?? false)
-                {
-                    propertySchema.Nullable = propNullable.Value<bool>();
-                }
-
-                if (propertyData?.TryGetValue("format", out var propFormat) ?? false)
-                {
-                    propertySchema.Format = propFormat.Value<string>();
-                }
-
-                if (propertyData?.TryGetValue("description", out var propDesc) ?? false)
-                {
-                    propertySchema.Description = propDesc.Value<string>();
-                }
-
-                if (propertyData?.TryGetValue("enum", out var enumToken) ?? false &&
-                enumToken is JArray)
-                {
-                    propertySchema.Enum = ((JArray)enumToken).Select<JToken, IOpenApiAny>(item =>
-                     item.Type switch
-                        {
-                            JTokenType.Integer => new OpenApiInteger((int)item.Value<long>()),
-                            JTokenType.String => new OpenApiString(item.Value<string>()),
-                            _ => new OpenApiString(item.ToString())
-                        }).Cast<IOpenApiAny>().ToList();
-                }
-
-                if (propertyData?.TryGetValue("oneOf", out var typesToken) ?? false &&
-                typesToken is JArray)
-                {
-                    propertySchema.OneOf = ((JArray)typesToken)
-                        .Select(item =>
-                                new OpenApiSchema()
-                                {
-                                    Type = item["type"]?.Value<string>() ?? ""
-                                })
-                    .ToList();
-                }
-
+                apiDocumentationGenerator.FixSchemaFormatting(property.Value as JObject ?? new JObject(), propertySchema);
 
                 schema.Properties[propertyName] = propertySchema;
             }
         }
 
-        finalSchemas[modelName] = schema;
+        formattedModels[modelName] = schema;
     }
 
-    finalSchemas = finalSchemas.OrderBy(key => key.Key).ToDictionary();
+    formattedModels = formattedModels.OrderBy(key => key.Key).ToDictionary();
 
     document.Components = new OpenApiComponents()
     {
-        Schemas = finalSchemas,
+        Schemas = formattedModels,
     };
 
     foreach (var authScheme in authSchemes)
