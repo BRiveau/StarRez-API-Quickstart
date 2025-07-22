@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
+using ApiDocumentation;
 
 namespace StarRez;
 
@@ -7,19 +8,31 @@ public class StarRezClient
 {
     private string starrezApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services";
     private string starrezDevApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services";
-    private HttpClient starrezClient = new HttpClient { BaseAddress = new Uri(starrezApiUrl) };
-    starrezClient.DefaultRequestHeaders.Add("Accept", "application/json");
+    private HttpClient starrezClient;
+    private ApiDocumentationGenerator apiDocumentationGenerator;
 
-    /*
-     * Configures auth header when using a single API user/key
-    starrezClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-            Convert.ToBase64String(
-              Encoding.ASCII.GetBytes(
-                $"{Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? ""}:{Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? ""}"
-          )
-        )
-    );
-    */
+    public StarRezClient(HttpClient client)
+    {
+        this.starrezClient = client;
+        apiDocumentationGenerator = new ApiDocumentationGenerator(this.starrezClient);
+
+        // Ensure that we are requesting json responses
+        this.starrezClient.DefaultRequestHeaders.Remove("Accept");
+        this.starrezClient.DefaultRequestHeaders.Add("Accept", "application/json");
+
+        /*
+        // Configures auth header when using a single API user/key and custom authentication logic
+         this.starrezClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+         Convert.ToBase64String(
+         Encoding.ASCII.GetBytes(
+         $"{Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? ""}:{Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? ""}"
+         )
+         )
+         );
+         */
+    }
+
+
 
     /// <summary>
     /// Allows for reassignment of the auth header used to make StarRez API requests
@@ -43,10 +56,14 @@ public class StarRezClient
         var request = new HttpRequestMessage(HttpMethod.Get, $"{(dev ? this.starrezDevApiUrl : this.starrezApiUrl).Replace("/services", "")}/swagger");
         var response = await this.starrezClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
+
+        return await this.apiDocumentationGenerator.ConvertSwaggerToOpenApi(await response.Content.ReadAsStringAsync());
     }
 
-    public object MakeRequest(HttpMethod method, string endpointPath)
-    {
+    /*
+        public object MakeRequest(HttpMethod method, string endpointPath)
+        {
 
-    }
+        }
+        */
 }

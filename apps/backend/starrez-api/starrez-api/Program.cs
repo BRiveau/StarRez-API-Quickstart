@@ -74,7 +74,6 @@ app.UseHttpsRedirection();
 // Configure HTTP clients
 string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
 
-StarRezClient starrezApiClient = new StarRezClient();
 string starrezApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services";
 string starrezDevApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services";
 HttpClientHandler handler = new HttpClientHandler();
@@ -85,6 +84,7 @@ if ((Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "") == "Dev
 HttpClient client = new(handler) { BaseAddress = new Uri(apiUrl) };
 // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKeyValidator.GetGatewayApiKey());
 
+StarRezClient starrezApiClient = new StarRezClient(client);
 HttpClient starrezClient = new HttpClient { BaseAddress = new Uri(starrezApiUrl) };
 starrezClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
         Convert.ToBase64String(
@@ -99,20 +99,8 @@ app.MapGet("/documentation",
     [ProducesResponseType(200)]
 async (HttpContext context, [FromHeader] bool? dev) =>
 {
-    // Get StarRez Swagger API documentation
-    var swaggerRequest = new HttpRequestMessage(HttpMethod.Get, $"{((dev ?? false) ? starrezDevApiUrl : starrezApiUrl).Replace("/services", "")}/swagger");
-    var swaggerResponse = await starrezClient.SendAsync(swaggerRequest);
-
-    // Convert Swagger documentation to OpenAPI documentation
-    var openApiRequestBody = new StringContent(await swaggerResponse.Content.ReadAsStringAsync(), UnicodeEncoding.UTF8, MediaTypeNames.Application.Json);
-    var openApiRequest = new HttpRequestMessage(HttpMethod.Post, "https://converter.swagger.io/api/convert")
-    {
-        Content = openApiRequestBody,
-    };
-    var openApiResponse = await client.SendAsync(openApiRequest);
-
     var reader = new OpenApiStreamReader();
-    var document = reader.Read(await openApiResponse.Content.ReadAsStreamAsync(), out var diagnostic);
+    var document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic);
 
     // Set development and production servers
     document!.Servers = new List<OpenApiServer>();
