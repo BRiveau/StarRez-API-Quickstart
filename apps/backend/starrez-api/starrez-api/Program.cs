@@ -234,6 +234,8 @@ async (HttpContext context, [FromHeader] bool? dev) =>
         finalSchemas[modelName] = schema;
     }
 
+    finalSchemas = finalSchemas.OrderBy(key => key.Key).ToDictionary();
+
     document.Components = new OpenApiComponents()
     {
         Schemas = finalSchemas,
