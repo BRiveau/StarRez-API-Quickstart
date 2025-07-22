@@ -1,13 +1,13 @@
 using System.Net.Http.Headers;
 using System.Text;
+using Microsoft.OpenApi.Models;
 using ApiDocumentation;
 
 namespace StarRez;
 
 public class StarRezClient
 {
-    private string starrezApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services";
-    private string starrezDevApiUrl = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services";
+    private Dictionary<string, string> starrezUrls = new Dictionary<string, string>();
     private HttpClient starrezClient;
     private ApiDocumentationGenerator apiDocumentationGenerator;
 
@@ -15,6 +15,10 @@ public class StarRezClient
     {
         this.starrezClient = client;
         apiDocumentationGenerator = new ApiDocumentationGenerator(this.starrezClient);
+
+        // Add production and development API URLs
+        this.starrezUrls.Add("Production", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services");
+        this.starrezUrls.Add("Development", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services");
 
         // Ensure that we are requesting json responses
         this.starrezClient.DefaultRequestHeaders.Remove("Accept");
@@ -53,11 +57,28 @@ public class StarRezClient
     /// </summary>
     public async Task<Stream> GetStarRezDocumentation(bool dev = false)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{(dev ? this.starrezDevApiUrl : this.starrezApiUrl).Replace("/services", "")}/swagger");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezUrls[(dev ? "Development" : "Production")].Replace("/services", "")}/swagger");
         var response = await this.starrezClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
         return await this.apiDocumentationGenerator.ConvertSwaggerToOpenApi(await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// Adds development and production StarRez API servers to OpenApiDocument servers
+    /// </summary>
+    public void AddStarRezServers(OpenApiDocument document)
+    {
+        document.Servers = new List<OpenApiServer>();
+
+        foreach (var url in this.starrezUrls)
+        {
+            document.Servers.Add(new OpenApiServer()
+            {
+                Description = url.Key,
+                Url = url.Value
+            });
+        }
     }
 
     /*

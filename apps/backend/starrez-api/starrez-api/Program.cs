@@ -102,18 +102,7 @@ async (HttpContext context, [FromHeader] bool? dev) =>
     var reader = new OpenApiStreamReader();
     var document = reader.Read(await starrezApiClient.GetStarRezDocumentation(), out var diagnostic);
 
-    // Set development and production servers
-    document!.Servers = new List<OpenApiServer>();
-    document.Servers.Add(new OpenApiServer()
-    {
-        Description = "Development",
-        Url = starrezDevApiUrl
-    });
-    document.Servers.Add(new OpenApiServer()
-    {
-        Description = "Production",
-        Url = starrezApiUrl
-    });
+    starrezApiClient.AddStarRezServers(document ?? new OpenApiDocument());
 
     var modelsRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models");
     modelsRequest.Headers.Add("dev", (dev ?? false).ToString());
