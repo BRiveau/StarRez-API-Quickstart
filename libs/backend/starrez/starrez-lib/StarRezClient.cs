@@ -71,10 +71,27 @@ public class StarRezClient
     }
 
     /// <summary>
+    /// Updates paths to fix improper path variable naming
+    /// </summary>
+    private void _UpdatePaths(OpenApiDocument document)
+    {
+        var pathsToUpdate = document.Paths.Keys.Where(apiPath => apiPath.Contains("tablename")).ToList();
+
+        foreach (var apiPath in pathsToUpdate)
+        {
+            var updatedName = apiPath.Replace("tablename", "tableName");
+            document.Paths.Add(updatedName, document.Paths[apiPath]);
+            document.Paths.Remove(apiPath);
+        }
+    }
+
+    /// <summary>
     /// Replaces default HTTP methods with corrected methods
     /// </summary>
     public void CorrectHttpMethods(OpenApiDocument document)
     {
+        this._UpdatePaths(document);
+
         foreach (var path in document.Paths)
         {
             if ((path.Key.Contains("databaseinfo") ||
@@ -142,6 +159,9 @@ public class StarRezClient
         return await response.Content.ReadAsStreamAsync();
     }
 
+    /// <summary>
+    /// Makes an HTTP request to get all enum values available for the specified enum
+    /// </summary>
     public async Task<Stream> GetStarRezEnum(string enumName, bool? dev)
     {
         var requestBody = new StringContent(
