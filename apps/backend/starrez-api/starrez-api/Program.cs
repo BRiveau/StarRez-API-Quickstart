@@ -5,9 +5,7 @@ using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
 using Microsoft.OpenApi.Writers;
 using Scalar.AspNetCore;
-using System.Net.Http.Headers;
 using System.Text;
-using System.Net.Mime;
 using Newtonsoft.Json;
 using System.Xml;
 using StarRez;
@@ -167,7 +165,7 @@ async ([FromHeader] bool? dev) =>
         IgnoreComments = true
     };
 
-    var schemas = new Dictionary<string, OpenApiSchema>();
+    var models = new Dictionary<string, OpenApiSchema>();
 
     var sb = new StringBuilder();
     var writer = new OpenApiJsonWriter(new StringWriter(sb));
@@ -182,58 +180,58 @@ async ([FromHeader] bool? dev) =>
         await tableReader.MoveToContentAsync();
         while (await tableReader.ReadAsync())
         {
-            if (schemas.ContainsKey(tableReader.Name) ||
-                    tableReader.Name == "Tables")
+            var modelName = tableReader.Name;
+            if (models.ContainsKey(modelName) ||
+                    modelName == "Tables")
             {
                 continue;
             }
 
-            sb.Append($"\"{tableReader.Name}\":");
-            List<string> requiredAttributes = new List<string>();
-            schemas.Add(tableReader.Name, new OpenApiSchema());
-            schemas[tableReader.Name].Type = "object";
+            sb.Append($"\"{modelName}\":");
+            models.Add(modelName, new OpenApiSchema());
+            models[modelName].Type = "object";
 
             using (XmlReader columnReader = XmlReader.Create(
                         await starrezApiClient.GetStarRezTableAttributes(
-                            tableReader.Name, dev),
+                            modelName, dev),
                         xmlReaderSettings))
             {
                 await columnReader.MoveToContentAsync();
                 while (await columnReader.ReadAsync())
                 {
-                    if (schemas[tableReader.Name].Properties.ContainsKey(columnReader.Name) ||
-                            tableReader.Name == columnReader.Name)
+                    if (models[modelName].Properties.ContainsKey(columnReader.Name) ||
+                            modelName == columnReader.Name)
                     {
                         continue;
                     }
 
-                    string attributeName = columnReader.Name;
-                    schemas[tableReader.Name].Properties.Add(attributeName, new OpenApiSchema());
+                    string propertyName = columnReader.Name;
+                    models[modelName].Properties.Add(propertyName, new OpenApiSchema());
 
-                    string enumName = attributeName.Substring(columnReader.Name.IndexOf('_') + 1);
+                    string enumName = propertyName.Substring(columnReader.Name.IndexOf('_') + 1);
                     if (columnReader.HasAttributes)
                     {
                         // Construct table references
-                        if (attributeName == "TableID")
+                        if (propertyName == "TableID")
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Description = "ID of element in specified Table";
+                            models[modelName].Properties[propertyName].Description = "ID of element in specified table";
                         }
-                        else if (attributeName == "TableName")
+                        else if (propertyName == "TableName")
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Description = "Name of table to be used for reference";
+                            models[modelName].Properties[propertyName].Description = "Name of table to be used for reference";
                         }
-                        else if (attributeName.Length != 3 &&
-                                !attributeName.Contains("GUID") &&
-                                attributeName.Contains("ID") &&
-                                tableReader.Name != attributeName.Replace("ID", ""))
+                        else if (propertyName.Length != 3 &&
+                                !propertyName.Contains("GUID") &&
+                                propertyName.Contains("ID") &&
+                                modelName != propertyName.Replace("ID", ""))
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Description = $"References {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
+                            models[modelName].Properties[propertyName].Description = $"References {propertyName.Substring(propertyName.IndexOf('_') + 1).Replace("ID", "")} table";
                         }
-                        else if (attributeName.Length != 3 &&
-                                !attributeName.Contains("GUID") &&
-                                attributeName.Contains("ID"))
+                        else if (propertyName.Length != 3 &&
+                                !propertyName.Contains("GUID") &&
+                                propertyName.Contains("ID"))
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Description = $"Primary identification key for {attributeName.Substring(attributeName.IndexOf('_') + 1).Replace("ID", "")} table";
+                            models[modelName].Properties[propertyName].Description = $"Primary identification key for {propertyName.Substring(propertyName.IndexOf('_') + 1).Replace("ID", "")} table";
                         }
 
                         for (int i = 0; i < columnReader.AttributeCount; i++)
@@ -241,120 +239,41 @@ async ([FromHeader] bool? dev) =>
                             columnReader.MoveToAttribute(i);
                             if (columnReader.Name == "required" && bool.Parse(columnReader.Value))
                             {
-                                schemas[tableReader.Name].Required.Add(attributeName);
+                                models[modelName].Required.Add(propertyName);
                             }
                             else if (columnReader.Name == "type")
                             {
-                                switch (columnReader.Value.ToLower())
-                                {
-                                    case string dateType when dateType.Contains("datetime"):
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "date-time";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Date and time as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z";
-                                            break;
-                                        }
-                                    case "date":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "date";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Date as defined by RFC 3339, section 5.6, for example, 2017-07-21";
-                                            break;
-                                        }
-                                    case "timestamp":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "time";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Time as defined by RFC 3339, section 5.6, for example, 17:32:28Z";
-                                            break;
-                                        }
-                                    case "money":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "number";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "decimal";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "A fixed point decimal number of unspecified precision and range";
-                                            break;
-                                        }
-                                    case "decimal":
-                                        {
-                                            goto case "money";
-                                        }
-                                    case "bigdecimal":
-                                        {
-                                            goto case "money";
-                                        }
-                                    case "binary":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "binary";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Any sequence of octets";
-                                            break;
-                                        }
-                                    case "byte":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "byte";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Base64 encoded data as defined by RFC4648, section 6";
-                                            break;
-                                        }
-                                    case "guid":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "guid";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "A Globally Unique Identifier, defined as UUID by RFC 9562, section 4, for example, f81d4fae-7dec-11d0-a765-00a0c91e6bf6";
-                                            break;
-                                        }
-                                    case "longstring":
-                                        {
-                                            goto case "binary";
-                                        }
-                                    case "short":
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = "integer";
-                                            schemas[tableReader.Name].Properties[attributeName].Format = "uint16";
-                                            schemas[tableReader.Name].Properties[attributeName].Description = "Unsigned 16-bit integer";
-                                            break;
-                                        }
-                                    default:
-                                        {
-                                            schemas[tableReader.Name].Properties[attributeName].Type = columnReader.Value.ToLower();
-                                            break;
-                                        }
-                                }
-
-                                if (attributeName.Contains("Email") || attributeName == "PortalAuthProviderUserID")
-                                {
-                                    schemas[tableReader.Name].Properties[attributeName].Type = "string";
-                                    schemas[tableReader.Name].Properties[attributeName].Format = "email";
-                                    schemas[tableReader.Name].Properties[attributeName].Description = "An email address, defined as Mailbox by RFC5321, section 2.3.11, for example, example@domain.com";
-                                }
+                                starrezApiClient.ImproveModelProperties(
+                                        models[modelName].Properties[propertyName],
+                                        propertyName,
+                                        columnReader.Value.ToLower());
                             }
                             else if (columnReader.Name == "size"
                                     && int.Parse(columnReader.Value) > 0)
                             {
-                                schemas[tableReader.Name].Properties[attributeName].MaxLength = int.Parse(columnReader.Value);
+                                models[modelName].Properties[propertyName].MaxLength = int.Parse(columnReader.Value);
                             }
                             else if (columnReader.Name == "allowNull")
                             {
-                                schemas[tableReader.Name].Properties[attributeName].Nullable = bool.Parse(columnReader.Value);
-                                if (schemas[tableReader.Name].Properties[attributeName].Enum.Count > 0)
+                                models[modelName].Properties[propertyName].Nullable = bool.Parse(columnReader.Value);
+                                if (models[modelName].Properties[propertyName].Enum.Count > 0)
                                 {
-                                    schemas[tableReader.Name].Properties[attributeName].Enum.Add(null);
+                                    models[modelName].Properties[propertyName].Enum.Add(null);
                                 }
                             }
                         }
 
                         if (!(enumName == "LockedUserReasonEnum" ||
                           enumName.Contains("OneTimeCode")) &&
-                            schemas[tableReader.Name].Properties[attributeName].Enum.Count < 1 &&
+                            models[modelName].Properties[propertyName].Enum.Count < 1 &&
                             enumName.Contains("Enum"))
                         {
-                            schemas[tableReader.Name].Properties[attributeName].Type = null;
-                            schemas[tableReader.Name].Properties[attributeName].OneOf.Add(new OpenApiSchema()
+                            models[modelName].Properties[propertyName].Type = null;
+                            models[modelName].Properties[propertyName].OneOf.Add(new OpenApiSchema()
                             {
                                 Type = "integer"
                             });
-                            schemas[tableReader.Name].Properties[attributeName].OneOf.Add(new OpenApiSchema()
+                            models[modelName].Properties[propertyName].OneOf.Add(new OpenApiSchema()
                             {
                                 Type = "string"
                             });
@@ -368,8 +287,8 @@ async ([FromHeader] bool? dev) =>
 
                             foreach (var enumValue in enumValues[enumName])
                             {
-                                schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiInteger(enumValue.enumId));
-                                schemas[tableReader.Name].Properties[attributeName].Enum.Add(new OpenApiString(enumValue.description.Replace(" ", "")));
+                                models[modelName].Properties[propertyName].Enum.Add(new OpenApiInteger(enumValue.enumId));
+                                models[modelName].Properties[propertyName].Enum.Add(new OpenApiString(enumValue.description.Replace(" ", "")));
                             }
                         }
 
@@ -377,7 +296,7 @@ async ([FromHeader] bool? dev) =>
                     }
                 }
             }
-            schemas[tableReader.Name].SerializeAsV3(writer);
+            models[modelName].SerializeAsV3(writer);
             writer.Flush();
 
             sb.Append(",");
