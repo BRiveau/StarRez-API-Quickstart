@@ -123,6 +123,31 @@ public class StarRezClient
         }
     }
 
+    public void GenerateSpecialPropertyDescription(OpenApiSchema propertySchema, string modelName, string propertyName)
+    {
+        if (propertyName == "TableID")
+        {
+            propertySchema.Description = "ID of element in specified table";
+        }
+        else if (propertyName == "TableName")
+        {
+            propertySchema.Description = "Name of table to be used for reference";
+        }
+        else if (propertyName.Length != 3 &&
+                !propertyName.Contains("GUID") &&
+                propertyName.Contains("ID") &&
+                modelName != propertyName.Replace("ID", ""))
+        {
+            propertySchema.Description = $"References {propertyName.Substring(propertyName.IndexOf('_') + 1).Replace("ID", "")} table";
+        }
+        else if (propertyName.Length != 3 &&
+                !propertyName.Contains("GUID") &&
+                propertyName.Contains("ID"))
+        {
+            propertySchema.Description = $"Primary identification key for {propertyName.Substring(propertyName.IndexOf('_') + 1).Replace("ID", "")} table";
+        }
+    }
+
     /// <summary>
     /// Updates property data on models to improve quality of documentation
     /// </summary>

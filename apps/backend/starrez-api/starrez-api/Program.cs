@@ -211,28 +211,10 @@ async ([FromHeader] bool? dev) =>
                     string enumName = propertyName.Substring(columnReader.Name.IndexOf('_') + 1);
                     if (columnReader.HasAttributes)
                     {
-                        // Construct table references
-                        if (propertyName == "TableID")
-                        {
-                            models[modelName].Properties[propertyName].Description = "ID of element in specified table";
-                        }
-                        else if (propertyName == "TableName")
-                        {
-                            models[modelName].Properties[propertyName].Description = "Name of table to be used for reference";
-                        }
-                        else if (propertyName.Length != 3 &&
-                                !propertyName.Contains("GUID") &&
-                                propertyName.Contains("ID") &&
-                                modelName != propertyName.Replace("ID", ""))
-                        {
-                            models[modelName].Properties[propertyName].Description = $"References {propertyName.Substring(propertyName.IndexOf('_') + 1).Replace("ID", "")} table";
-                        }
-                        else if (propertyName.Length != 3 &&
-                                !propertyName.Contains("GUID") &&
-                                propertyName.Contains("ID"))
-                        {
-                            models[modelName].Properties[propertyName].Description = $"Primary identification key for {propertyName.Substring(propertyName.IndexOf('_') + 1).Replace("ID", "")} table";
-                        }
+                        starrezApiClient.GenerateSpecialPropertyDescription(
+                                models[modelName].Properties[propertyName],
+                                modelName,
+                                propertyName);
 
                         for (int i = 0; i < columnReader.AttributeCount; i++)
                         {
