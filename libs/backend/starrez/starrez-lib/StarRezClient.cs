@@ -133,15 +133,70 @@ public class StarRezClient
         }
     }
 
+    private Dictionary<string, OpenApiMediaType> _ConstructErrorResponses()
+    {
+        var errorResponses = new Dictionary<string, OpenApiMediaType>();
+        errorResponses.Add("StarRezHttpError", new OpenApiMediaType()
+        {
+            Schema = new OpenApiSchema()
+            {
+                Description = "Response returned from StarRez API",
+                Type = "array",
+                Nullable = true,
+                Items = new OpenApiSchema()
+                {
+                    Description = "StarRez HTTP error message",
+                    Type = "object",
+                    Properties = new Dictionary<string, OpenApiSchema> {
+                        {
+                            "description",
+                            new OpenApiSchema() {
+                                Description = "Description of error",
+                                Type = "string"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        return errorResponses;
+    }
+
+    private void _UpdateResponseTypes(OpenApiOperation operation)
+    {
+        operation.Responses = new OpenApiResponses();
+
+        operation.Responses.Add("200", new OpenApiResponse()
+        {
+            Description = "Everything went fine."
+        });
+        operation.Responses.Add("400", new OpenApiResponse()
+        {
+            Description = "Your request is invalid, or badly formed, and we'll return an error message that tells you why.",
+            Content = this._ConstructErrorResponses()
+        });
+        operation.Responses.Add("403", new OpenApiResponse()
+        {
+            Description = "Your request is valid, but you do not have permission to select data from the specified table, or update the specified field.",
+            Content = this._ConstructErrorResponses()
+        });
+        operation.Responses.Add("404", new OpenApiResponse()
+        {
+            Description = "Your request is valid, but no data was found, or the table you are trying to use does not exist.",
+            Content = this._ConstructErrorResponses()
+        });
+    }
+
     /// <summary>
     /// Adds enum values to parameter schemas to improve documentation quality
     /// </summary>
-    public void AddParameterEnums(OpenApiDocument document, bool? dev)
+    public void AddParameterEnums(OpenApiDocument document)
     {
         foreach (var path in document.Paths)
         {
             foreach (var operation in path.Value.Operations)
             {
+                this._UpdateResponseTypes(operation.Value);
                 for (int i = 0; i < operation.Value.Parameters.Count; i++)
                 {
                     var parameterData = document
