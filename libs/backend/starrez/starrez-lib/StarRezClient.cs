@@ -4,7 +4,6 @@ using Microsoft.OpenApi.Models;
 using System.Net.Mime;
 using System.Xml;
 using Microsoft.OpenApi.Any;
-using System.Text.Json;
 
 namespace StarRez;
 
@@ -137,7 +136,7 @@ public class StarRezClient
     /// <summary>
     /// Adds enum values to parameter schemas to improve documentation quality
     /// </summary>
-    public async Task AddParameterEnums(OpenApiDocument document, bool? dev)
+    public void AddParameterEnums(OpenApiDocument document, bool? dev)
     {
         foreach (var path in document.Paths)
         {
@@ -152,35 +151,6 @@ public class StarRezClient
 
                     switch (operation.Value.Parameters[i].Name)
                     {
-                        case "tableName":
-                            {
-                                using (XmlReader tableReader = XmlReader.Create(
-                                            await this.GetStarRezTables(dev),
-                                            this.xmlReaderSettings))
-                                {
-                                    await tableReader.MoveToContentAsync();
-                                    while (await tableReader.ReadAsync())
-                                    {
-                                        if (tableReader.Name == "Tables")
-                                        {
-                                            continue;
-                                        }
-
-                                        document
-                                            .Paths[path.Key]
-                                            .Operations[operation.Key]
-                                            .Parameters[i]
-                                            .Schema
-                                            .Enum
-                                            .Add(new OpenApiString(tableReader.Name));
-                                    }
-                                }
-
-                                parameterData.Schema.Enum = parameterData.Schema.Enum
-                                    .OrderBy(enumValue => ((OpenApiString)enumValue).Value)
-                                    .ToList();
-                                break;
-                            }
                         case "format":
                             {
                                 IOpenApiAny[] formatList = [
@@ -195,39 +165,6 @@ public class StarRezClient
                                 parameterData
                                     .Schema
                                     .Enum = formatList.ToList();
-                                break;
-                            }
-                        case "report":
-                            {
-                                var reportData = await JsonSerializer
-                                    .DeserializeAsync<StarRezReportName[]>(await this.GetStarRezReportNames(dev));
-
-                                foreach (var report in reportData ?? [])
-                                {
-                                    parameterData
-                                        .Schema
-                                        .Enum.Add(new OpenApiInteger(report.reportId));
-                                    parameterData
-                                        .Schema
-                                        .Enum.Add(new OpenApiString(report.reportName));
-                                }
-
-                                parameterData
-                                    .Schema
-                                    .Type = null;
-                                parameterData
-                                    .Schema
-                                    .OneOf.Add(new OpenApiSchema()
-                                    {
-                                        Type = "integer"
-                                    });
-                                parameterData
-                                    .Schema
-                                    .OneOf.Add(new OpenApiSchema()
-                                    {
-                                        Type = "string"
-                                    });
-
                                 break;
                             }
                     }
@@ -370,26 +307,6 @@ public class StarRezClient
     public async Task<Stream> GetStarRezTables(bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/tablelist.xml");
-        var response = await this.client.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadAsStreamAsync();
-    }
-
-    /// <summary>
-    /// Makes an HTTP request to get all StarRez report names
-    /// </summary>
-    public async Task<Stream> GetStarRezReportNames(bool? dev)
-    {
-        var requestBody = new StringContent(
-                "SELECT DISTINCT ReportID AS reportId, Description AS reportName FROM Report WHERE MainTableName != '' AND description NOT CONTAINS '@' AND description NOT CONTAINS 'New Report'",
-                UnicodeEncoding.UTF8,
-                MediaTypeNames.Application.Json);
-        var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/query")
-        {
-            Content = requestBody
-        };
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
