@@ -2,6 +2,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using System.Net.Mime;
+using System.Xml;
+using Microsoft.OpenApi.Any;
+using System.Text.Json;
 
 namespace StarRez;
 
@@ -10,6 +13,14 @@ public class StarRezClient
     private Dictionary<string, string> starrezApiUrls = new Dictionary<string, string>();
     private string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
     private HttpClient client;
+    private XmlReaderSettings xmlReaderSettings = new XmlReaderSettings
+    {
+        Async = true,
+        IgnoreProcessingInstructions = true,
+        IgnoreWhitespace = true,
+        IgnoreComments = true
+    };
+
 
     public StarRezClient(HttpClient client)
     {
@@ -119,6 +130,108 @@ public class StarRezClient
                 path.Value.Operations.Remove(OperationType.Post);
                 path.Value.Operations.Add(OperationType.Patch, pathData);
                 path.Value.Operations.Add(OperationType.Put, pathData);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds enum values to parameter schemas to improve documentation quality
+    /// </summary>
+    public async Task AddParameterEnums(OpenApiDocument document, bool? dev)
+    {
+        foreach (var path in document.Paths)
+        {
+            foreach (var operation in path.Value.Operations)
+            {
+                for (int i = 0; i < operation.Value.Parameters.Count; i++)
+                {
+                    var parameterData = document
+                        .Paths[path.Key]
+                        .Operations[operation.Key]
+                        .Parameters[i];
+
+                    switch (operation.Value.Parameters[i].Name)
+                    {
+                        case "tableName":
+                            {
+                                using (XmlReader tableReader = XmlReader.Create(
+                                            await this.GetStarRezTables(dev),
+                                            this.xmlReaderSettings))
+                                {
+                                    await tableReader.MoveToContentAsync();
+                                    while (await tableReader.ReadAsync())
+                                    {
+                                        if (tableReader.Name == "Tables")
+                                        {
+                                            continue;
+                                        }
+
+                                        document
+                                            .Paths[path.Key]
+                                            .Operations[operation.Key]
+                                            .Parameters[i]
+                                            .Schema
+                                            .Enum
+                                            .Add(new OpenApiString(tableReader.Name));
+                                    }
+                                }
+
+                                parameterData.Schema.Enum = parameterData.Schema.Enum
+                                    .OrderBy(enumValue => ((OpenApiString)enumValue).Value)
+                                    .ToList();
+                                break;
+                            }
+                        case "format":
+                            {
+                                IOpenApiAny[] formatList = [
+                                    new OpenApiString("atom"),
+                                    new OpenApiString("csv"),
+                                    new OpenApiString("htm"),
+                                    new OpenApiString("html"),
+                                    new OpenApiString("html-xml"),
+                                    new OpenApiString("json"),
+                                    new OpenApiString("xml")];
+
+                                parameterData
+                                    .Schema
+                                    .Enum = formatList.ToList();
+                                break;
+                            }
+                        case "report":
+                            {
+                                var reportData = await JsonSerializer
+                                    .DeserializeAsync<StarRezReportName[]>(await this.GetStarRezReportNames(dev));
+
+                                foreach (var report in reportData ?? [])
+                                {
+                                    parameterData
+                                        .Schema
+                                        .Enum.Add(new OpenApiInteger(report.reportId));
+                                    parameterData
+                                        .Schema
+                                        .Enum.Add(new OpenApiString(report.reportName));
+                                }
+
+                                parameterData
+                                    .Schema
+                                    .Type = null;
+                                parameterData
+                                    .Schema
+                                    .OneOf.Add(new OpenApiSchema()
+                                    {
+                                        Type = "integer"
+                                    });
+                                parameterData
+                                    .Schema
+                                    .OneOf.Add(new OpenApiSchema()
+                                    {
+                                        Type = "string"
+                                    });
+
+                                break;
+                            }
+                    }
+                }
             }
         }
     }
@@ -257,6 +370,26 @@ public class StarRezClient
     public async Task<Stream> GetStarRezTables(bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/tablelist.xml");
+        var response = await this.client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsStreamAsync();
+    }
+
+    /// <summary>
+    /// Makes an HTTP request to get all StarRez report names
+    /// </summary>
+    public async Task<Stream> GetStarRezReportNames(bool? dev)
+    {
+        var requestBody = new StringContent(
+                "SELECT DISTINCT ReportID AS reportId, Description AS reportName FROM Report WHERE MainTableName != '' AND description NOT CONTAINS '@' AND description NOT CONTAINS 'New Report'",
+                UnicodeEncoding.UTF8,
+                MediaTypeNames.Application.Json);
+        var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/query")
+        {
+            Content = requestBody
+        };
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
