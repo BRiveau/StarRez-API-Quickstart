@@ -1,4 +1,8 @@
+using System.Text;
+using System.Xml;
+using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.Writers;
 using Newtonsoft.Json.Linq;
 
 namespace StarRez;
@@ -182,5 +186,133 @@ enumToken is JArray)
             propertySchema.Format = "email";
             propertySchema.Description = "An email address, defined as Mailbox by RFC5321, section 2.3.11, for example, example@domain.com";
         }
+    }
+
+    public async Task<string> CreateStarRezModelsSchema(bool? dev)
+    {
+        var models = new Dictionary<string, OpenApiSchema>();
+
+        var sb = new StringBuilder();
+        var writer = new OpenApiJsonWriter(new StringWriter(sb));
+
+        var enumValues = new Dictionary<string, StarRezEnum[]>();
+
+        sb.Append("{");
+        using (XmlReader tableReader = XmlReader.Create(
+                    await starrezApiClient.GetStarRezTables(dev),
+                    StarRezConstants.xmlReaderSettings))
+        {
+            await tableReader.MoveToContentAsync();
+            while (await tableReader.ReadAsync())
+            {
+                var modelName = tableReader.Name;
+                if (models.ContainsKey(modelName) ||
+                        modelName == "Tables")
+                {
+                    continue;
+                }
+
+                sb.Append($"\"{modelName}\":");
+                models.Add(modelName, new OpenApiSchema());
+                models[modelName].Type = "object";
+
+                using (XmlReader columnReader = XmlReader.Create(
+                            await starrezApiClient.GetStarRezTableAttributes(
+                                modelName, dev),
+                            StarRezConstants.xmlReaderSettings))
+                {
+                    await columnReader.MoveToContentAsync();
+                    while (await columnReader.ReadAsync())
+                    {
+                        if (models[modelName].Properties.ContainsKey(columnReader.Name) ||
+                                modelName == columnReader.Name)
+                        {
+                            continue;
+                        }
+
+                        string propertyName = columnReader.Name;
+                        models[modelName].Properties.Add(propertyName, new OpenApiSchema());
+
+                        string enumName = propertyName.Substring(columnReader.Name.IndexOf('_') + 1);
+                        if (columnReader.HasAttributes)
+                        {
+                            starrezApiClient.GenerateSpecialPropertyDescription(
+                                    models[modelName].Properties[propertyName],
+                                    modelName,
+                                    propertyName);
+
+                            for (int i = 0; i < columnReader.AttributeCount; i++)
+                            {
+                                columnReader.MoveToAttribute(i);
+                                if (columnReader.Name == "required" && bool.Parse(columnReader.Value))
+                                {
+                                    models[modelName].Required.Add(propertyName);
+                                }
+                                else if (columnReader.Name == "type")
+                                {
+                                    starrezApiClient.ImproveModelProperties(
+                                            models[modelName].Properties[propertyName],
+                                            propertyName,
+                                            columnReader.Value.ToLower());
+                                }
+                                else if (columnReader.Name == "size"
+                                        && int.Parse(columnReader.Value) > 0)
+                                {
+                                    models[modelName].Properties[propertyName].MaxLength = int.Parse(columnReader.Value);
+                                }
+                                else if (columnReader.Name == "allowNull")
+                                {
+                                    models[modelName].Properties[propertyName].Nullable = bool.Parse(columnReader.Value);
+                                    if (models[modelName].Properties[propertyName].Enum.Count > 0)
+                                    {
+                                        models[modelName].Properties[propertyName].Enum.Add(null);
+                                    }
+                                }
+                            }
+
+                            if (!(enumName == "LockedUserReasonEnum" ||
+                              enumName.Contains("OneTimeCode")) &&
+                                models[modelName].Properties[propertyName].Enum.Count < 1 &&
+                                enumName.Contains("Enum"))
+                            {
+                                models[modelName].Properties[propertyName].Type = null;
+                                models[modelName].Properties[propertyName].OneOf.Add(new OpenApiSchema()
+                                {
+                                    Type = "integer"
+                                });
+                                models[modelName].Properties[propertyName].OneOf.Add(new OpenApiSchema()
+                                {
+                                    Type = "string"
+                                });
+
+                                if (!enumValues.ContainsKey(enumName))
+                                {
+                                    enumValues.Add(
+                                            enumName, await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(
+                                                await starrezApiClient.GetStarRezEnum(enumName, dev)) ?? []);
+                                }
+
+                                foreach (var enumValue in enumValues[enumName])
+                                {
+                                    models[modelName].Properties[propertyName].Enum.Add(new OpenApiInteger(enumValue.enumId));
+                                    models[modelName].Properties[propertyName].Enum.Add(new OpenApiString(enumValue.description.Replace(" ", "")));
+                                }
+                            }
+
+                            columnReader.MoveToElement();
+                        }
+                    }
+                }
+                models[modelName].SerializeAsV3(writer);
+                writer.Flush();
+
+                sb.Append(",");
+            }
+        }
+
+        sb.Remove(sb.Length - 1, 1);
+        sb.Append("\n}");
+
+        return sb.ToString();
     }
 }

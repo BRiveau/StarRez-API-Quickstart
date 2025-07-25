@@ -78,6 +78,8 @@ HttpClient client = new HttpClient(handler);
 // client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKeyValidator.GetGatewayApiKey());
 
 StarRezClient starrezApiClient = new StarRezClient(client);
+StarRezDocumentationFormatting documentationFormatting = new StarRezDocumentationFormatting();
+
 ApiDocumentationGenerator apiDocumentationGenerator = new ApiDocumentationGenerator(client);
 
 app.MapGet("/documentation",
@@ -90,11 +92,7 @@ async (HttpContext context, [FromHeader] bool? dev) =>
             await starrezApiClient.GetStarRezDocumentation(dev)
         ), out var diagnostic);
 
-    starrezApiClient.AddStarRezServers(document);
-    starrezApiClient.AddStarRezAuth(document);
-    starrezApiClient.CorrectHttpMethods(document);
-    starrezApiClient.AddParameterEnums(document);
-    await starrezApiClient.GetStarRezModels(dev, document); // To improve documentation load times, comment this line out
+    await documentationFormatting.ImproveStarRezDocumentation(document, dev);
 
     var sb = new StringBuilder();
     var writer = new OpenApiJsonWriter(new StringWriter(sb));
