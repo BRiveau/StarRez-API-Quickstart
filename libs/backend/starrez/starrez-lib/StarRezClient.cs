@@ -156,6 +156,7 @@ public class StarRezClient
         }
     }
 
+
     /// <summary>
     /// Replaces default HTTP methods with corrected methods
     /// </summary>
@@ -227,13 +228,33 @@ public class StarRezClient
         return errorResponses;
     }
 
-    private void _UpdateResponseTypes(OpenApiOperation operation)
+    private Dictionary<string, OpenApiMediaType> _GetProperResponseType(string apiPath)
+    {
+        var responses = new Dictionary<string, OpenApiMediaType>();
+
+        if (apiPath.Contains("query"))
+        {
+            responses.Add("QueryResults", new OpenApiMediaType()
+            {
+                Schema = new OpenApiSchema()
+                {
+                    Description = "StarQL response data",
+                    Type = "object"
+                }
+            });
+        }
+
+        return responses;
+    }
+
+    private void _UpdateResponseCodes(OpenApiOperation operation, string apiPath)
     {
         operation.Responses = new OpenApiResponses();
 
         operation.Responses.Add("200", new OpenApiResponse()
         {
-            Description = "Everything went fine."
+            Description = "Everything went fine.",
+            Content = this._GetProperResponseType(apiPath)
         });
         operation.Responses.Add("400", new OpenApiResponse()
         {
@@ -261,7 +282,7 @@ public class StarRezClient
         {
             foreach (var operation in path.Value.Operations)
             {
-                this._UpdateResponseTypes(operation.Value);
+                this._UpdateResponseCodes(operation.Value, path.Key);
                 for (int i = 0; i < operation.Value.Parameters.Count; i++)
                 {
                     var parameterData = document
