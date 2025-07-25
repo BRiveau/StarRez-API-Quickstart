@@ -48,53 +48,88 @@ public class StarRezDocumentationFormatting
               }});
     }
 
+    /// <summary>
+    /// Adds format parameter to endpoints that utilize it, but it is not specified in documentation
+    /// </summary>>
+    private void _FixFormatParameter(OpenApiPaths paths, string existingPath)
+    {
+
+        var updatedPath = $"{existingPath}.{{format}}";
+        paths.Add(updatedPath, paths[existingPath]);
+        paths.Remove(existingPath);
+
+        foreach (var operation in paths[updatedPath].Operations)
+        {
+            operation.Value.Parameters.Add(new OpenApiParameter()
+            {
+                Name = "format",
+                In = ParameterLocation.Path,
+                Required = true,
+                Schema = new OpenApiSchema()
+                {
+                    Type = "string"
+                }
+            });
+        }
+    }
 
     /// <summary>
-    /// Adds path parameters that were missing from original Swagger documentation
+    /// Updates paths to fix improper path variable naming
     /// </summary>
-    private void _FixMissingPathParameters(OpenApiDocument document)
+    private void _FixTableNameParameter(OpenApiPaths paths, string existingPath)
     {
-        var missingParamPaths = document.Paths.Keys.Where(apiPath =>
-                apiPath.Contains("getreport") || apiPath.Contains("query")).ToList();
-        foreach (var apiPath in missingParamPaths)
+        var updatedName = existingPath.Replace("tablename", "tableName");
+        paths.Add(updatedName, paths[existingPath]);
+        paths.Remove(existingPath);
+    }
+
+    /// <summary>
+    /// Fixes all path parameter problems in the OpenAPI document
+    /// </summary>
+    private void _FixPathParameters(OpenApiDocument document)
+    {
+        var pathsToUpdate = document.Paths.Keys.Where(apiPath =>
+                apiPath.Contains("tablename")
+                || apiPath.Contains("getreport")).ToList();
+
+        foreach (var apiPath in pathsToUpdate)
         {
-            if (apiPath.Contains("getreport"))
+            switch (apiPath)
             {
-                var updatedName = $"{apiPath}.{{format}}";
-                document.Paths.Add(updatedName, document.Paths[apiPath]);
-                document.Paths.Remove(apiPath);
-
-                foreach (var operation in document.Paths[updatedName].Operations)
-                {
-                    operation.Value.Parameters.Add(new OpenApiParameter()
+                case string path when path.Contains("tablename"):
                     {
-                        Name = "format",
-                        In = ParameterLocation.Path,
-                        Required = true,
-                        Schema = new OpenApiSchema()
-                        {
-                            Type = "string"
-                        }
-                    });
-                }
-            }
-            else if (apiPath.Contains("query"))
-            {
-                document.Paths[apiPath].Operations[OperationType.Post].Description = "Allows the user to select ad-hoc data from the database using StarRez Query Language (StarQL). The data will be returned in a format appropriate for the desired content accept type.";
-                var baseOperationConfig = document.Paths[apiPath].Operations[OperationType.Post];
-                document.Paths[apiPath].Operations[OperationType.Post] = new OpenApiOperation(baseOperationConfig)
-                {
-                    RequestBody = new OpenApiRequestBody()
-                    {
-                        Description = "StarQL query to execute",
-                        Content = new Dictionary<string, OpenApiMediaType> { { "text/plain", new OpenApiMediaType() } },
-                        Required = true
+                        this._FixTableNameParameter(document.Paths, apiPath);
+                        break;
                     }
-                };
+                case string path when path.Contains("getreport"):
+                    {
+                        this._FixFormatParameter(document.Paths, apiPath);
+                        break;
+                    }
+            }
+        }
+    }
 
-                document.Paths[apiPath].Operations[OperationType.Get] = new OpenApiOperation(baseOperationConfig)
-                {
-                    Parameters = [new OpenApiParameter()
+    /// <summary>
+    /// Properly documents both `query` endpoints from StarRez API
+    /// </summary>
+    private void _FixQueryParameters(IDictionary<OperationType, OpenApiOperation> operations)
+    {
+        operations[OperationType.Post].Description = "Allows the user to select ad-hoc data from the database using StarRez Query Language (StarQL). The data will be returned in a format appropriate for the desired content accept type.";
+        var baseOperationConfig = operations[OperationType.Post];
+        operations[OperationType.Post] = new OpenApiOperation(baseOperationConfig)
+        {
+            RequestBody = new OpenApiRequestBody()
+            {
+                Description = "StarQL query to execute",
+                Content = new Dictionary<string, OpenApiMediaType> { { "text/plain", new OpenApiMediaType() } },
+                Required = true
+            }
+        };
+
+        operations[OperationType.Get] = new OpenApiOperation(baseOperationConfig)
+        {
+            Parameters = [new OpenApiParameter()
                     {
                         Name = "q",
                         In = ParameterLocation.Query,
@@ -105,9 +140,7 @@ public class StarRezDocumentationFormatting
                             Description = "StarQL query to execute"
                         }
                     }]
-                };
-            }
-        }
+        };
     }
 
     /// <summary>
@@ -128,23 +161,6 @@ public class StarRezDocumentationFormatting
         });
     }
 
-    /// <summary>
-    /// Updates paths to fix improper path variable naming
-    /// </summary>
-    private void _UpdatePaths(OpenApiDocument document)
-    {
-        this._FixMissingPathParameters(document);
-        var pathsToUpdate = document.Paths.Keys.Where(apiPath => apiPath.Contains("tablename")).ToList();
-
-        foreach (var apiPath in pathsToUpdate)
-        {
-            var updatedName = apiPath.Replace("tablename", "tableName");
-            document.Paths.Add(updatedName, document.Paths[apiPath]);
-            document.Paths.Remove(apiPath);
-        }
-
-        this._AddAcceptJsonHeader(document);
-    }
 
     private Dictionary<string, OpenApiMediaType> _ConstructResponseDefinition(string responseType, OpenApiMediaType responseDefinition)
     {
@@ -473,11 +489,22 @@ enumToken is JArray)
     {
         this._AddStarRezServers(document);
         this._AddStarRezAuth(document);
+        this._FixPathParameters(document);
 
         foreach (var path in document.Paths)
         {
             var apiPath = path.Key;
             this._UpdateHttpMethods(path.Value.Operations, apiPath);
+
+            if (apiPath.Contains("getreport"))
+            {
+
+            }
+            else if (apiPath.Contains("query"))
+            {
+                this._FixQueryParameters(path.Value.Operations);
+            }
+
             foreach (var operation in path.Value.Operations)
             {
                 if (!apiPath.Contains("{format}"))
@@ -485,6 +512,7 @@ enumToken is JArray)
                     this._AddAcceptJsonHeader(operation.Value);
                 }
                 this._AddParameterEnums(operation.Value.Parameters);
+                this._UpdateResponseCodes(operation.Value, apiPath);
             }
         }
 
