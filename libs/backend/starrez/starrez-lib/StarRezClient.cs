@@ -141,6 +141,32 @@ public class StarRezClient
     }
 
     /// <summary>
+    /// Sets default `Accept` header to specify JSON as default response type
+    /// </summary>
+    private void _AddAcceptJsonHeader(OpenApiDocument document)
+    {
+        var pathsToUpdate = document.Paths.Keys.Where(apiPath => !apiPath.Contains("{format}")).ToList();
+
+        foreach (var apiPath in pathsToUpdate)
+        {
+            foreach (var operation in document.Paths[apiPath].Operations.Keys)
+            {
+                document.Paths[apiPath].Operations[operation].Parameters.Add(new OpenApiParameter()
+                {
+                    Name = "Accept",
+                    In = ParameterLocation.Header,
+                    Schema = new OpenApiSchema()
+                    {
+                        Type = "string",
+                        Default = new Microsoft.OpenApi.Any.OpenApiString("application/json"),
+                        Description = "Specifies the response return type following the MIME standard as specified by RFC 6838, section 4, for example `application/json` (for dynamic response typing, use `*/*`)",
+                    }
+                });
+            }
+        }
+    }
+
+    /// <summary>
     /// Updates paths to fix improper path variable naming
     /// </summary>
     private void _UpdatePaths(OpenApiDocument document)
@@ -154,6 +180,8 @@ public class StarRezClient
             document.Paths.Add(updatedName, document.Paths[apiPath]);
             document.Paths.Remove(apiPath);
         }
+
+        this._AddAcceptJsonHeader(document);
     }
 
 
@@ -202,7 +230,7 @@ public class StarRezClient
     private Dictionary<string, OpenApiMediaType> _ConstructErrorResponses()
     {
         var errorResponses = new Dictionary<string, OpenApiMediaType>();
-        errorResponses.Add("StarRezHttpError", new OpenApiMediaType()
+        errorResponses.Add("application/json", new OpenApiMediaType()
         {
             Schema = new OpenApiSchema()
             {
@@ -234,7 +262,7 @@ public class StarRezClient
 
         if (apiPath.Contains("query"))
         {
-            responses.Add("QueryResults", new OpenApiMediaType()
+            responses.Add("application/json", new OpenApiMediaType()
             {
                 Schema = new OpenApiSchema()
                 {
