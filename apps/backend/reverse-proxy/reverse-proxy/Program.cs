@@ -143,6 +143,16 @@ app.MapReverseProxy(proxyPipeline =>
         // Request Logging
         Log.ForContext("Custom", true).Information($"{"User"} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
 
+        // Properly route to development or production API
+        if (isDev && (proxyFeature.Route.Cluster?.Destinations.ContainsKey("development") ?? false))
+        {
+            proxyFeature.AvailableDestinations = proxyFeature.Route.Cluster.Destinations["development"];
+        }
+        else if (!isDev && (proxyFeature.Route.Cluster?.Destinations.ContainsKey("production") ?? false))
+        {
+            proxyFeature.AvailableDestinations = proxyFeature.Route.Cluster.Destinations["production"];
+        }
+
         await next();
 
         var response = context.Response;

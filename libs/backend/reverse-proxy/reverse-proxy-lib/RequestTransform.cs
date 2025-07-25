@@ -95,7 +95,9 @@ public class RequestTransform
         }
         else if (clusterUrl == "https://uri.starrezhousing.com")
         {
-            this._requestContext.Path = $"/starrez/{decodedQueryString?.Split("services")[1]}";
+            this._requestContext.Path = $"/starrez{decodedQueryString?.Split("services")[1]}";
+            this._requestContext.ProxyRequest.Headers.Remove("dev");
+            this._requestContext.ProxyRequest.Headers.Add("dev", decodedQueryString?.Contains("Dev").ToString());
         }
 
         if (this._requestHeaders.ContainsKey("Authorization"))
