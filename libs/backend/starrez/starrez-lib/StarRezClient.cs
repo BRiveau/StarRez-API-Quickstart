@@ -85,10 +85,10 @@ public class StarRezClient
     /// </summary>
     private void _FixMissingPathParameters(OpenApiDocument document)
     {
-        var missingParamPaths = document.Paths.Keys.Where(apiPath => apiPath.Contains("getreport") || apiPath.Contains("select") || apiPath.Contains("query")).ToList();
+        var missingParamPaths = document.Paths.Keys.Where(apiPath => apiPath.Contains("getreport") || apiPath.Contains("query")).ToList();
         foreach (var apiPath in missingParamPaths)
         {
-            if (apiPath.Contains("getreport") || apiPath.Contains("select"))
+            if (apiPath.Contains("getreport"))
             {
                 var updatedName = $"{apiPath}.{{format}}";
                 document.Paths.Add(updatedName, document.Paths[apiPath]);
