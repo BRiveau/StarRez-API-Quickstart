@@ -1,9 +1,8 @@
 using Yarp.ReverseProxy.Transforms;
-using Yarp.ReverseProxy.Management;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
-using ReverseProxy;
+using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +22,27 @@ builder.Services.AddReverseProxy()
       handler.AutomaticDecompression = System.Net.DecompressionMethods.All;
   })
   .LoadFromConfig(reverseProxyConfig)
+    .LoadFromMemory([new RouteConfig(){
+            RouteId = "starrezApi",
+            ClusterId= "StarRez",
+            Match = new RouteMatch {
+            Path = "/starrez/{*params}",
+            Methods =  ["GET", "HEAD", "PUT", "POST", "PATCH", "DELETE"]
+            },
+            Transforms = [new Dictionary<string,string>{
+            {
+            "PathRemovePrefix", "/starrez"
+            }
+            }]
+            }], [new ClusterConfig(){
+            ClusterId = "StarRez",
+            Destinations =
+            new Dictionary<string,DestinationConfig> {{"development", new DestinationConfig(){
+            Address = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services"
+            }}, {"production", new DestinationConfig(){
+            Address = $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services"
+            }}}
+            }])
     .AddTransforms(builderContext =>
       {
           string routeId = builderContext.Route.RouteId;
