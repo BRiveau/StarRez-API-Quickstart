@@ -26,8 +26,8 @@ public class StarRezClient
         this.client = client;
 
         // Add production and development API URLs
-        this.starrezApiUrls.Add("Production", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services");
         this.starrezApiUrls.Add("Development", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services");
+        this.starrezApiUrls.Add("Production", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services");
 
         // Ensure that we are requesting json responses
         this.client.DefaultRequestHeaders.Remove("Accept");
