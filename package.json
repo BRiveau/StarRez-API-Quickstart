@@ -9,11 +9,11 @@
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.48.0",
     "@nx-dotnet/core": "^3.0.0",
-    "@nx/js": "21.2.4",
+    "@nx/js": "21.3.6",
     "@swc-node/register": "~1.9.1",
     "@swc/core": "~1.5.7",
     "@swc/helpers": "~0.5.11",
-    "nx": "21.2.4",
+    "nx": "21.3.6",
     "prettier": "^2.6.2",
     "tslib": "^2.3.0",
     "typescript": "~5.8.2"
