@@ -24,6 +24,9 @@ public class StarRezDocumentationFormatting
         }
     }
 
+    /// <summary>
+    /// Adds Basic Authentication as the default auth scheme in the OpenAPI document
+    /// </summary>
     private void _AddStarRezAuth(OpenApiDocument document)
     {
         var basicAuth = new OpenApiSecurityScheme
@@ -111,6 +114,43 @@ public class StarRezDocumentationFormatting
     }
 
     /// <summary>
+    /// Replaces default HTTP methods with corrected methods
+    /// </summary>
+    private void _UpdateHttpMethods(IDictionary<OperationType, OpenApiOperation> operations, string apiPath)
+    {
+        var operationData = operations[OperationType.Post];
+
+        if ((apiPath.Contains("databaseinfo") ||
+                apiPath.Contains("attachment") ||
+                apiPath.Contains("select") ||
+                (apiPath.Contains("photo") &&
+                    !apiPath.Contains("set")) ||
+                apiPath.Contains("test") ||
+                apiPath.Contains("get")) &&
+                operations.All(operation => operation.Value.RequestBody == null))
+        {
+            operations.Add(OperationType.Get, operationData);
+            operations.Remove(OperationType.Post);
+        }
+        else if (apiPath.Contains("delete"))
+        {
+            operations.Add(OperationType.Delete, operationData);
+            operations.Remove(OperationType.Post);
+        }
+        else if (apiPath.Contains("update") &&
+                !apiPath.Contains("post"))
+        {
+            operations.Add(OperationType.Patch, operationData);
+            operations.Add(OperationType.Put, operationData);
+            operations.Remove(OperationType.Post);
+        }
+        else if (apiPath.Contains("query"))
+        {
+            operations.Add(OperationType.Get, operationData);
+        }
+    }
+
+    /// <summary>
     /// Properly documents both `query` endpoints from StarRez API
     /// </summary>
     private void _FixQueryParameters(IDictionary<OperationType, OpenApiOperation> operations)
@@ -161,15 +201,36 @@ public class StarRezDocumentationFormatting
         });
     }
 
-    private Dictionary<string, OpenApiMediaType> _ConstructResponseDefinition(string responseType, OpenApiMediaType responseDefinition)
+    /// <summary>
+    /// Adds enum values to parameter schemas to improve documentation quality
+    /// </summary>
+    private void _AddParameterEnums(IList<OpenApiParameter> parameters)
     {
-        var responses = new Dictionary<string, OpenApiMediaType>();
-
-        responses.Add(responseType, responseDefinition);
-
-        return responses;
+        // this._UpdateResponseCodes(operation.Value, path.Key);
+        int formatParameterIndex = parameters.ToList().FindIndex(parameter => parameter.Name == "format");
+        if (formatParameterIndex != -1)
+        {
+            parameters[formatParameterIndex].Schema.Enum = StarRezConstants.starrezFormatList.ToList();
+            parameters[formatParameterIndex].Schema.Default = new OpenApiString("xml");
+        }
     }
 
+    /// <summary>
+    /// Simplifies process of constructing response definitions
+    /// </summary>
+    private Dictionary<string, OpenApiMediaType> _ConstructResponseDefinition(string responseType, OpenApiMediaType responseDefinition)
+    {
+        return new Dictionary<string, OpenApiMediaType>(){
+            {
+                responseType,
+                responseDefinition
+            }
+        };
+    }
+
+    /// <summary>
+    /// Constructs the proper response definition for the specified endpoint
+    /// </summary>
     private Dictionary<string, OpenApiMediaType> _GetEndpointResponse(string apiPath)
     {
         switch (apiPath)
@@ -192,6 +253,9 @@ public class StarRezDocumentationFormatting
         }
     }
 
+    /// <summary>
+    /// Updates HTTP response codes to reflect StarRez documentation, as well as provide a better idea of return types
+    /// </summary>
     private void _UpdateResponseCodes(OpenApiOperation operation, string apiPath)
     {
         operation.Responses = new OpenApiResponses();
@@ -216,58 +280,6 @@ public class StarRezDocumentationFormatting
             Description = "Your request is valid, but no data was found, or the table you are trying to use does not exist.",
             Content = this._ConstructResponseDefinition("application/json", StarRezConstants.errorResponseDefinition)
         });
-    }
-
-
-    /// <summary>
-    /// Replaces default HTTP methods with corrected methods
-    /// </summary>
-    private void _UpdateHttpMethods(IDictionary<OperationType, OpenApiOperation> operations, string apiPath)
-    {
-        var operationData = operations[OperationType.Post];
-
-        if ((apiPath.Contains("databaseinfo") ||
-                apiPath.Contains("attachment") ||
-                apiPath.Contains("select") ||
-                (apiPath.Contains("photo") &&
-                    !apiPath.Contains("set")) ||
-                apiPath.Contains("test") ||
-                apiPath.Contains("get")) &&
-                operations.All(operation => operation.Value.RequestBody == null))
-        {
-            operations.Add(OperationType.Get, operationData);
-            operations.Remove(OperationType.Post);
-        }
-        else if (apiPath.Contains("delete"))
-        {
-            operations.Add(OperationType.Delete, operationData);
-            operations.Remove(OperationType.Post);
-        }
-        else if (apiPath.Contains("update") &&
-                !apiPath.Contains("post"))
-        {
-            operations.Add(OperationType.Patch, operationData);
-            operations.Add(OperationType.Put, operationData);
-            operations.Remove(OperationType.Post);
-        }
-        else if (apiPath.Contains("query"))
-        {
-            operations.Add(OperationType.Get, operationData);
-        }
-    }
-
-    /// <summary>
-    /// Adds enum values to parameter schemas to improve documentation quality
-    /// </summary>
-    private void _AddParameterEnums(IList<OpenApiParameter> parameters)
-    {
-        // this._UpdateResponseCodes(operation.Value, path.Key);
-        int formatParameterIndex = parameters.ToList().FindIndex(parameter => parameter.Name == "format");
-        if (formatParameterIndex != -1)
-        {
-            parameters[formatParameterIndex].Schema.Enum = StarRezConstants.starrezFormatList.ToList();
-            parameters[formatParameterIndex].Schema.Default = new OpenApiString("xml");
-        }
     }
 
     /// <summary>
