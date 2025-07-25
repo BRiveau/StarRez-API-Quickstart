@@ -85,25 +85,57 @@ public class StarRezClient
     /// </summary>
     private void _FixMissingPathParameters(OpenApiDocument document)
     {
-        var missingParamPaths = document.Paths.Keys.Where(apiPath => apiPath.Contains("getreport")).ToList();
+        var missingParamPaths = document.Paths.Keys.Where(apiPath => apiPath.Contains("getreport") || apiPath.Contains("query")).ToList();
         foreach (var apiPath in missingParamPaths)
         {
-            var updatedName = $"{apiPath}.{{format}}";
-            document.Paths.Add(updatedName, document.Paths[apiPath]);
-            document.Paths.Remove(apiPath);
-
-            foreach (var operation in document.Paths[updatedName].Operations)
+            if (apiPath.Contains("getreport"))
             {
-                operation.Value.Parameters.Add(new OpenApiParameter()
+                var updatedName = $"{apiPath}.{{format}}";
+                document.Paths.Add(updatedName, document.Paths[apiPath]);
+                document.Paths.Remove(apiPath);
+
+                foreach (var operation in document.Paths[updatedName].Operations)
                 {
-                    Name = "format",
-                    In = ParameterLocation.Path,
-                    Required = true,
-                    Schema = new OpenApiSchema()
+                    operation.Value.Parameters.Add(new OpenApiParameter()
                     {
-                        Type = "string"
+                        Name = "format",
+                        In = ParameterLocation.Path,
+                        Required = true,
+                        Schema = new OpenApiSchema()
+                        {
+                            Type = "string"
+                        }
+                    });
+                }
+            }
+            else if (apiPath.Contains("query"))
+            {
+                document.Paths[apiPath].Operations[OperationType.Post].Description = "Allows the user to select ad-hoc data from the database using StarRez Query Language (StarQL). The data will be returned in a format appropriate for the desired content accept type.";
+                var baseOperationConfig = document.Paths[apiPath].Operations[OperationType.Post];
+                document.Paths[apiPath].Operations[OperationType.Post] = new OpenApiOperation(baseOperationConfig)
+                {
+                    RequestBody = new OpenApiRequestBody()
+                    {
+                        Description = "StarQL query to execute",
+                        Content = new Dictionary<string, OpenApiMediaType> { { "text/plain", new OpenApiMediaType() } },
+                        Required = true
                     }
-                });
+                };
+
+                document.Paths[apiPath].Operations[OperationType.Get] = new OpenApiOperation(baseOperationConfig)
+                {
+                    Parameters = [new OpenApiParameter()
+                    {
+                        Name = "q",
+                        In = ParameterLocation.Query,
+                        Required = true,
+                        Schema = new OpenApiSchema()
+                        {
+                            Type = "string",
+                            Description = "StarQL query to execute"
+                        }
+                    }]
+                };
             }
         }
     }
@@ -129,8 +161,6 @@ public class StarRezClient
     /// </summary>
     public void CorrectHttpMethods(OpenApiDocument document)
     {
-        this._UpdatePaths(document);
-
         foreach (var path in document.Paths)
         {
             var operationData = path.Value.Operations[OperationType.Post];
@@ -159,7 +189,13 @@ public class StarRezClient
                 path.Value.Operations.Add(OperationType.Put, operationData);
                 path.Value.Operations.Remove(OperationType.Post);
             }
+            else if (path.Key.Contains("query"))
+            {
+                path.Value.Operations.Add(OperationType.Get, operationData);
+            }
         }
+
+        this._UpdatePaths(document);
     }
 
     private Dictionary<string, OpenApiMediaType> _ConstructErrorResponses()
