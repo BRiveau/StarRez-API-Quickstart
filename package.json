@@ -7,6 +7,7 @@
   },
   "private": true,
   "devDependencies": {
+    "@dotenvx/dotenvx": "^1.48.0",
     "@nx-dotnet/core": "^3.0.0",
     "@nx/js": "21.2.4",
     "@swc-node/register": "~1.9.1",
@@ -18,6 +19,8 @@
     "typescript": "~5.8.2"
   },
   "workspaces": [
-    "packages/*"
+    "apps/**",
+    "libs/**",
+    "!libs/**/dist"
   ]
 }
