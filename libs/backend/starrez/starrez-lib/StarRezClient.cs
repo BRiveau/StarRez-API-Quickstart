@@ -81,10 +81,39 @@ public class StarRezClient
     }
 
     /// <summary>
+    /// Adds path parameters that were missing from original Swagger documentation
+    /// </summary>
+    private void _FixMissingPathParameters(OpenApiDocument document)
+    {
+        var missingParamPaths = document.Paths.Keys.Where(apiPath => apiPath.Contains("getreport")).ToList();
+        foreach (var apiPath in missingParamPaths)
+        {
+            var updatedName = $"{apiPath}.{{format}}";
+            document.Paths.Add(updatedName, document.Paths[apiPath]);
+            document.Paths.Remove(apiPath);
+
+            foreach (var operation in document.Paths[updatedName].Operations)
+            {
+                operation.Value.Parameters.Add(new OpenApiParameter()
+                {
+                    Name = "format",
+                    In = ParameterLocation.Path,
+                    Required = true,
+                    Schema = new OpenApiSchema()
+                    {
+                        Type = "string"
+                    }
+                });
+            }
+        }
+    }
+
+    /// <summary>
     /// Updates paths to fix improper path variable naming
     /// </summary>
     private void _UpdatePaths(OpenApiDocument document)
     {
+        this._FixMissingPathParameters(document);
         var pathsToUpdate = document.Paths.Keys.Where(apiPath => apiPath.Contains("tablename")).ToList();
 
         foreach (var apiPath in pathsToUpdate)
@@ -104,6 +133,8 @@ public class StarRezClient
 
         foreach (var path in document.Paths)
         {
+            var operationData = path.Value.Operations[OperationType.Post];
+
             if ((path.Key.Contains("databaseinfo") ||
                     path.Key.Contains("attachment") ||
                     path.Key.Contains("select") ||
@@ -113,22 +144,20 @@ public class StarRezClient
                     path.Key.Contains("get")) &&
                     path.Value.Operations.All(operation => operation.Value.RequestBody == null))
             {
-                var pathData = path.Value.Operations[OperationType.Post];
+                path.Value.Operations.Add(OperationType.Get, operationData);
                 path.Value.Operations.Remove(OperationType.Post);
-                path.Value.Operations.Add(OperationType.Get, pathData);
             }
             else if (path.Key.Contains("delete"))
             {
-                var pathData = path.Value.Operations[OperationType.Post];
+                path.Value.Operations.Add(OperationType.Delete, operationData);
                 path.Value.Operations.Remove(OperationType.Post);
-                path.Value.Operations.Add(OperationType.Delete, pathData);
             }
-            else if (path.Key.Contains("update"))
+            else if (path.Key.Contains("update") &&
+                    !path.Key.Contains("post"))
             {
-                var pathData = path.Value.Operations[OperationType.Post];
+                path.Value.Operations.Add(OperationType.Patch, operationData);
+                path.Value.Operations.Add(OperationType.Put, operationData);
                 path.Value.Operations.Remove(OperationType.Post);
-                path.Value.Operations.Add(OperationType.Patch, pathData);
-                path.Value.Operations.Add(OperationType.Put, pathData);
             }
         }
     }
