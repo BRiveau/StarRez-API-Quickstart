@@ -95,9 +95,19 @@ public class RequestTransform
         }
         else if (clusterUrl == "https://uri.starrezhousing.com")
         {
-            this._requestContext.Path = $"/starrez{decodedQueryString?.Split("services")[1]}";
+            var routePath = $"/starrez{decodedQueryString?.Split("services")[1]}";
             this._requestContext.ProxyRequest.Headers.Remove("dev");
             this._requestContext.ProxyRequest.Headers.Add("dev", decodedQueryString?.Contains("Dev").ToString());
+
+            string? queryString = null;
+            string[] splitQueryString = routePath?.Split('?') ?? [];
+            if (splitQueryString.Length > 0)
+            {
+                queryString = string.Join("", splitQueryString?.Skip(1) ?? []);
+            }
+
+            this._requestContext.HttpContext.Request.QueryString = new QueryString($"?{queryString}");
+            this._requestContext.Path = (splitQueryString ?? [])[0];
         }
 
         if (this._requestHeaders.ContainsKey("Authorization"))
