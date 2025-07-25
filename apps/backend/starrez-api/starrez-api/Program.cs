@@ -6,12 +6,10 @@ using Microsoft.OpenApi.Readers;
 using Microsoft.OpenApi.Writers;
 using Scalar.AspNetCore;
 using System.Text;
-using Newtonsoft.Json;
 using System.Xml;
 using StarRez;
 using ApiDocumentation;
 using Microsoft.OpenApi.Any;
-using Newtonsoft.Json.Linq;
 
 // Define auth schemes for API (the StarRez API uses Basic authentication)
 OpenApiSecurityScheme[] authSchemes = [
@@ -93,55 +91,10 @@ async (HttpContext context, [FromHeader] bool? dev) =>
         ), out var diagnostic);
 
     starrezApiClient.AddStarRezServers(document);
+    starrezApiClient.AddStarRezAuth(document);
     starrezApiClient.CorrectHttpMethods(document);
     starrezApiClient.AddParameterEnums(document);
-
-    var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(
-        await starrezApiClient.GetStarRezModels(dev));
-
-    var formattedModels = new Dictionary<string, OpenApiSchema>();
-
-    foreach (var model in models ?? [])
-    {
-        var modelName = model.Key;
-        var schema = new OpenApiSchema();
-
-        apiDocumentationGenerator.FixSchemaFormatting(model.Value, schema);
-
-        if (model.Value.TryGetValue("properties", out var modelProperties) &&
-            modelProperties is JObject properties)
-        {
-            foreach (var property in properties)
-            {
-                var propertyName = property.Key;
-                var propertySchema = new OpenApiSchema();
-
-                apiDocumentationGenerator.FixSchemaFormatting(
-                    property.Value as JObject ?? new JObject(), propertySchema);
-
-                schema.Properties[propertyName] = propertySchema;
-            }
-        }
-
-        formattedModels[modelName] = schema;
-    }
-
-    formattedModels = formattedModels.OrderBy(key => key.Key).ToDictionary();
-
-    document.Components = new OpenApiComponents()
-    {
-        Schemas = formattedModels,
-    };
-
-    foreach (var authScheme in authSchemes)
-    {
-        document.Components.SecuritySchemes.Add(authScheme.Scheme, authScheme);
-        document.SecurityRequirements.Add(new OpenApiSecurityRequirement {
-              {
-                  authScheme,
-                  new List<string>()
-              }});
-    }
+    await starrezApiClient.GetStarRezModels(dev, document); // To improve documentation load times, comment this line out
 
     var sb = new StringBuilder();
     var writer = new OpenApiJsonWriter(new StringWriter(sb));

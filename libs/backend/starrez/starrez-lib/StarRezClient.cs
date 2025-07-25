@@ -4,6 +4,8 @@ using Microsoft.OpenApi.Models;
 using System.Net.Mime;
 using System.Xml;
 using Microsoft.OpenApi.Any;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 
 namespace StarRez;
 
@@ -461,16 +463,142 @@ public class StarRezClient
         }
     }
 
-    /// <summary>
-    /// Makes an HTTP request to get all StarRez model definitions
-    /// </summary>
-    public async Task<string> GetStarRezModels(bool? dev)
+    private async Task<string> _GetStarRezModelDefinitions(bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models");
         request.Headers.Add("dev", (dev ?? false).ToString());
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
+    }
+
+    /// <summary>
+    /// Ensures that all schema properties are properly set (fixes problems with JSON deserialization)
+    /// </summary>
+    private void _FixSchemaFormatting(JObject schemaValue, OpenApiSchema schema)
+    {
+        if (schemaValue.TryGetValue("type", out var type))
+        {
+            schema.Type = type.Value<string>();
+        }
+
+        if (schemaValue.TryGetValue("format", out var format))
+        {
+            schema.Format = format.Value<string>();
+        }
+
+        if (schemaValue.TryGetValue("maxLength", out var maxLength))
+        {
+            schema.MaxLength = maxLength.Value<int>();
+        }
+
+        if (schemaValue.TryGetValue("nullable", out var nullable))
+        {
+            schema.Nullable = nullable.Value<bool>();
+        }
+
+        if (schemaValue.TryGetValue("description", out var description))
+        {
+            schema.Description = description.Value<string>();
+        }
+
+        if (schemaValue.TryGetValue("required", out var required) && required is JArray)
+        {
+            schema.Required = ((JArray)required).Select<JToken, string>(item =>
+                item.Value<string>() ?? ""
+            ).Where(s => !string.IsNullOrWhiteSpace(s)).ToHashSet();
+        }
+
+        if (schemaValue.TryGetValue("enum", out var enumToken) &&
+enumToken is JArray)
+        {
+            schema.Enum = ((JArray)enumToken).Select<JToken, IOpenApiAny>(item =>
+             item.Type switch
+                {
+                    JTokenType.Integer => new OpenApiInteger((int)item.Value<long>()),
+                    JTokenType.String => new OpenApiString(item.Value<string>()),
+                    _ => new OpenApiString(item.ToString())
+                }).Cast<IOpenApiAny>().ToList();
+        }
+
+        if (schemaValue.TryGetValue("oneOf", out var typesToken) &&
+        typesToken is JArray)
+        {
+            schema.OneOf = ((JArray)typesToken)
+                .Select(item =>
+                        new OpenApiSchema()
+                        {
+                            Type = item["type"]?.Value<string>() ?? ""
+                        })
+            .ToList();
+        }
+    }
+
+    /// <summary>
+    /// Makes an HTTP request to get all StarRez model definitions
+    /// </summary>
+    public async Task GetStarRezModels(bool? dev, OpenApiDocument document)
+    {
+        var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(
+                await this._GetStarRezModelDefinitions(dev));
+
+        var formattedModels = new Dictionary<string, OpenApiSchema>();
+
+        foreach (var model in models ?? [])
+        {
+            var modelName = model.Key;
+            var schema = new OpenApiSchema();
+
+            this._FixSchemaFormatting(model.Value, schema);
+
+            if (model.Value.TryGetValue("properties", out var modelProperties) &&
+                modelProperties is JObject properties)
+            {
+                foreach (var property in properties)
+                {
+                    var propertyName = property.Key;
+                    var propertySchema = new OpenApiSchema();
+
+                    this._FixSchemaFormatting(
+                        property.Value as JObject ?? new JObject(), propertySchema);
+
+                    schema.Properties[propertyName] = propertySchema;
+                }
+            }
+
+            formattedModels[modelName] = schema;
+        }
+
+        formattedModels = formattedModels.OrderBy(key => key.Key).ToDictionary();
+
+        document.Components = new OpenApiComponents()
+        {
+            Schemas = formattedModels,
+        };
+    }
+
+    public void AddStarRezAuth(OpenApiDocument document)
+    {
+        var basicAuth = new OpenApiSecurityScheme
+        {
+            Description = "Basic authentication scheme",
+            Reference = new OpenApiReference
+            {
+                Type = ReferenceType.SecurityScheme,
+                Id = "Basic"
+            },
+            Scheme = "Basic",
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            In = ParameterLocation.Header,
+        };
+
+        document.Components.SecuritySchemes.Add(basicAuth.Scheme, basicAuth);
+        document.SecurityRequirements.Add(new OpenApiSecurityRequirement {
+              {
+                  basicAuth,
+                  new List<string>()
+              }});
     }
 
     /// <summary>
