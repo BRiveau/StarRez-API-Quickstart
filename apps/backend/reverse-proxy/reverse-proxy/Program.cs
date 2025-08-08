@@ -163,16 +163,16 @@ app.MapReverseProxy(proxyPipeline =>
         bool isDev = requestHeaders.ContainsKey("dev") && bool.Parse(requestHeaders["dev"]!);
         var userClaims = context.User.Claims.ToDictionary(claim => claim.Type, claim => claim.Value);
 
-        var userEmail = "Unauthenticated User";
+        var userName = "Unauthenticated User";
 
-        // Add code here to update user email (for logs) based on the data within the authentication method
+        // Add code here to update username (for logs) based on the data within the authentication method
         if (authorizationType == "Basic")
         {
-            userEmail = Encoding.ASCII.GetString(Convert.FromBase64String(authorizationData)).Split(':')[0];
+            userName = Encoding.ASCII.GetString(Convert.FromBase64String(authorizationData)).Split(':')[0];
         }
 
         // Request Logging
-        Log.ForContext("Custom", true).Information($"{userEmail} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
+        Log.ForContext("Custom", true).Information($"{userName} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
 
         // Properly route to development or production API
         if (isDev && (proxyFeature.Route.Cluster?.Destinations.ContainsKey("development") ?? false))
@@ -189,7 +189,7 @@ app.MapReverseProxy(proxyPipeline =>
         var response = context.Response;
 
         // Response Logging
-        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {userEmail} received response of {response.StatusCode}");
+        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {userName} received response of {response.StatusCode}");
     });
 });
 
