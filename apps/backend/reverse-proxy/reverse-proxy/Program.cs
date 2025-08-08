@@ -92,9 +92,9 @@ builder.Services.AddReverseProxy()
 string logFilePath = $"../../logs/{DateTime.Now.ToString("MM-dd-yyyy")}-reverse-proxy.log"; // Sets output filename and directory
 string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"; // Uses Serilog format to configure logging output styling
 Log.Logger = new LoggerConfiguration()
-  .Filter.ByIncludingOnly(le => (le.Level >= LogEventLevel.Warning)
-      || (le.Properties.ContainsKey("Custom")
-        && bool.Parse(le.Properties["Custom"].ToString())))
+  .Filter.ByIncludingOnly(logEvent => (logEvent.Level >= LogEventLevel.Warning)
+      || (logEvent.Properties.ContainsKey("Custom")
+        && bool.Parse(logEvent.Properties["Custom"].ToString())))
   .WriteTo.Console(outputTemplate: outputTemplate)
   .WriteTo.File(logFilePath,
       outputTemplate: outputTemplate)
