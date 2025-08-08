@@ -50,7 +50,7 @@ public class StarRezDocumentationFormatting
             In = ParameterLocation.Header,
         };
 
-        if (document.Components.SecuritySchemes.ContainsKey(basicAuth.Scheme))
+        if (!document.Components.SecuritySchemes.ContainsKey(basicAuth.Scheme))
         {
             document.Components.SecuritySchemes.Add(basicAuth.Scheme, basicAuth);
         }
@@ -299,8 +299,6 @@ public class StarRezDocumentationFormatting
     {
         var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(
                 await this._starRezModelFormatter.CreateStarRezModelsSchema(dev));
-        var securitySchemes = document.Components.SecuritySchemes;
-
         document.Components.Schemas = this._starRezModelFormatter.FormatStarRezModelsSchema(models ?? new Dictionary<string, JObject>());
     }
 
