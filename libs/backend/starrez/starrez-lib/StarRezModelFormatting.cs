@@ -9,7 +9,14 @@ namespace StarRez;
 
 public class StarRezModelFormatting
 {
-    private void GenerateSpecialPropertyDescription(OpenApiSchema propertySchema, string modelName, string propertyName)
+    private StarRezClient _starRezApiClient;
+
+    public StarRezModelFormatting(StarRezClient client)
+    {
+        this._starRezApiClient = client;
+    }
+
+    private void _GenerateSpecialPropertyDescription(OpenApiSchema propertySchema, string modelName, string propertyName)
     {
         if (propertyName == "TableID")
         {
@@ -100,7 +107,7 @@ enumToken is JArray)
     /// <summary>
     /// Updates property data on models to improve quality of documentation
     /// </summary>
-    public void ImproveModelProperties(OpenApiSchema propertySchema, string propertyName, string existingType)
+    private void _ImproveModelProperties(OpenApiSchema propertySchema, string propertyName, string existingType)
     {
         switch (existingType)
         {
@@ -199,7 +206,7 @@ enumToken is JArray)
 
         sb.Append("{");
         using (XmlReader tableReader = XmlReader.Create(
-                    await starrezApiClient.GetStarRezTables(dev),
+                    await this._starRezApiClient.GetStarRezTables(dev),
                     StarRezConstants.xmlReaderSettings))
         {
             await tableReader.MoveToContentAsync();
@@ -217,7 +224,7 @@ enumToken is JArray)
                 models[modelName].Type = "object";
 
                 using (XmlReader columnReader = XmlReader.Create(
-                            await starrezApiClient.GetStarRezTableAttributes(
+                            await this._starRezApiClient.GetStarRezTableAttributes(
                                 modelName, dev),
                             StarRezConstants.xmlReaderSettings))
                 {
@@ -236,7 +243,7 @@ enumToken is JArray)
                         string enumName = propertyName.Substring(columnReader.Name.IndexOf('_') + 1);
                         if (columnReader.HasAttributes)
                         {
-                            starrezApiClient.GenerateSpecialPropertyDescription(
+                            this._GenerateSpecialPropertyDescription(
                                     models[modelName].Properties[propertyName],
                                     modelName,
                                     propertyName);
@@ -250,7 +257,7 @@ enumToken is JArray)
                                 }
                                 else if (columnReader.Name == "type")
                                 {
-                                    starrezApiClient.ImproveModelProperties(
+                                    this._ImproveModelProperties(
                                             models[modelName].Properties[propertyName],
                                             propertyName,
                                             columnReader.Value.ToLower());
@@ -289,7 +296,7 @@ enumToken is JArray)
                                 {
                                     enumValues.Add(
                                             enumName, await System.Text.Json.JsonSerializer.DeserializeAsync<StarRezEnum[]>(
-                                                await starrezApiClient.GetStarRezEnum(enumName, dev)) ?? []);
+                                                await this._starRezApiClient.GetStarRezEnum(enumName, dev)) ?? []);
                                 }
 
                                 foreach (var enumValue in enumValues[enumName])
@@ -315,4 +322,39 @@ enumToken is JArray)
 
         return sb.ToString();
     }
+
+    public Dictionary<string, OpenApiSchema> FormatStarRezModelsSchema(Dictionary<string, JObject> models)
+    {
+        var formattedModels = new Dictionary<string, OpenApiSchema>();
+
+        foreach (var model in models ?? [])
+        {
+            var modelName = model.Key;
+            var schema = new OpenApiSchema();
+
+            this._FixSchemaFormatting(model.Value, schema);
+
+            if (model.Value.TryGetValue("properties", out var modelProperties) &&
+                modelProperties is JObject properties)
+            {
+                foreach (var property in properties)
+                {
+                    var propertyName = property.Key;
+                    var propertySchema = new OpenApiSchema();
+
+                    this._FixSchemaFormatting(
+                        property.Value as JObject ?? new JObject(), propertySchema);
+
+                    schema.Properties[propertyName] = propertySchema;
+                }
+            }
+
+            formattedModels[modelName] = schema;
+        }
+
+        formattedModels = formattedModels.OrderBy(key => key.Key).ToDictionary();
+
+        return formattedModels;
+    }
+
 }

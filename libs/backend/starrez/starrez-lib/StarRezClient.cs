@@ -8,7 +8,6 @@ namespace StarRez;
 public class StarRezClient
 {
     private Dictionary<string, string> starrezApiUrls = new Dictionary<string, string>();
-    private string apiUrl = Environment.GetEnvironmentVariable("API_URL") ?? "";
     private HttpClient client;
     private XmlReaderSettings xmlReaderSettings = new XmlReaderSettings
     {
@@ -58,15 +57,6 @@ public class StarRezClient
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadAsStringAsync();
-    }
-
-    public async Task<string> GetStarRezModelDefinitions(bool? dev)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{apiUrl}/starrez/models");
-        request.Headers.Add("dev", (dev ?? false).ToString());
-        var response = await this.client.SendAsync(request);
-        response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
 

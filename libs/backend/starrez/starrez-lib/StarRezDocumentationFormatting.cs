@@ -7,6 +7,13 @@ namespace StarRez;
 
 public class StarRezDocumentationFormatting
 {
+    private StarRezModelFormatting _starRezModelFormatter;
+
+    public StarRezDocumentationFormatting(StarRezClient client)
+    {
+        this._starRezModelFormatter = new StarRezModelFormatting(client);
+    }
+
     /// <summary>
     /// Adds development and production StarRez API servers to OpenApiDocument servers
     /// </summary>
@@ -43,7 +50,10 @@ public class StarRezDocumentationFormatting
             In = ParameterLocation.Header,
         };
 
-        document.Components.SecuritySchemes.Add(basicAuth.Scheme, basicAuth);
+        if (document.Components.SecuritySchemes.ContainsKey(basicAuth.Scheme))
+        {
+            document.Components.SecuritySchemes.Add(basicAuth.Scheme, basicAuth);
+        }
         document.SecurityRequirements.Add(new OpenApiSecurityRequirement {
               {
                   basicAuth,
@@ -288,41 +298,10 @@ public class StarRezDocumentationFormatting
     private async Task _AddStarRezModels(OpenApiDocument document, bool? dev)
     {
         var models = JsonConvert.DeserializeObject<Dictionary<string, JObject>>(
-                await this.GetStarRezModelDefinitions(dev));
+                await this._starRezModelFormatter.CreateStarRezModelsSchema(dev));
+        var securitySchemes = document.Components.SecuritySchemes;
 
-        var formattedModels = new Dictionary<string, OpenApiSchema>();
-
-        foreach (var model in models ?? [])
-        {
-            var modelName = model.Key;
-            var schema = new OpenApiSchema();
-
-            this._FixSchemaFormatting(model.Value, schema);
-
-            if (model.Value.TryGetValue("properties", out var modelProperties) &&
-                modelProperties is JObject properties)
-            {
-                foreach (var property in properties)
-                {
-                    var propertyName = property.Key;
-                    var propertySchema = new OpenApiSchema();
-
-                    this._FixSchemaFormatting(
-                        property.Value as JObject ?? new JObject(), propertySchema);
-
-                    schema.Properties[propertyName] = propertySchema;
-                }
-            }
-
-            formattedModels[modelName] = schema;
-        }
-
-        formattedModels = formattedModels.OrderBy(key => key.Key).ToDictionary();
-
-        document.Components = new OpenApiComponents()
-        {
-            Schemas = formattedModels,
-        };
+        document.Components.Schemas = this._starRezModelFormatter.FormatStarRezModelsSchema(models ?? new Dictionary<string, JObject>());
     }
 
     /// <summary>
