@@ -3,6 +3,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Yarp.ReverseProxy.Configuration;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -155,13 +156,23 @@ app.MapReverseProxy(proxyPipeline =>
         var clusterId = proxyFeature.Route.Cluster?.ClusterId;
         var request = context.Request;
         var queryString = request.QueryString;
-        var authorization = request.Headers.Authorization.ToString();
+        var authorization = request.Headers.Authorization.ToString().Split(' ');
+        var authorizationType = authorization[0];
+        var authorizationData = string.Join(' ', authorization.Skip(1));
         var requestHeaders = request.Headers.ToDictionary();
         bool isDev = requestHeaders.ContainsKey("dev") && bool.Parse(requestHeaders["dev"]!);
         var userClaims = context.User.Claims.ToDictionary(claim => claim.Type, claim => claim.Value);
 
+        var userEmail = "Unauthenticated User";
+
+        // Add code here to update user email (for logs) based on the data within the authentication method
+        if (authorizationType == "Basic")
+        {
+            userEmail = Encoding.ASCII.GetString(Convert.FromBase64String(authorizationData)).Split(':')[0];
+        }
+
         // Request Logging
-        Log.ForContext("Custom", true).Information($"{"User"} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
+        Log.ForContext("Custom", true).Information($"{userEmail} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
 
         // Properly route to development or production API
         if (isDev && (proxyFeature.Route.Cluster?.Destinations.ContainsKey("development") ?? false))
@@ -178,7 +189,7 @@ app.MapReverseProxy(proxyPipeline =>
         var response = context.Response;
 
         // Response Logging
-        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {"User"} received response of {response.StatusCode}");
+        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {userEmail} received response of {response.StatusCode}");
     });
 });
 
