@@ -1,18 +1,35 @@
 # Starrez Api Quickstart Guide
 
-## Technology Overview
+## Introduction
+
+This repository can be used to quickly start using the StarRez API while conforming to industry standards.
+
+### Technology Overview
 
 - NX Monorepo is used for improving the developer experience of working with many projects in a single location ()
 - ASP.NET Core 9.0 is the framework used to construct the reverse proxy and internal StarRez API applications ()
 - YARP is the NuGet package used for managing the reverse proxy, allowing for a micro-services architecture on the backend ()
 
-## Set Up for Development
+## Features
+
+- Preconfigured reverse-proxy application for quick integration with existing APIs
+- Request/response logging of all reverse-proxy requests using Serilog ()
+- Template application for creating custom StarRez API logic
+- Self-hosted API documentation website using Scalar ()
+- Updates StarRez API documentation to meet HTTP standards
+- Optionally include latest StarRez database schemas in API documentation website (significantly slows down initial page load)
+- Automatically generates API documentation using OpenAPI
+
+## Installation
 
 ### Software Requirements
 
 - NodeJS (for monorepo/web development)
 - NPM (for package management/monorepo work **This is included with a NodeJS install**)
 - ASP.NET 9.0 SDK (for API development)
+- StarRez with API package
+
+### StarRez Setup
 
 ### Initial Setup
 
@@ -22,5 +39,3 @@
    - STARREZ_API_URL (The base URL of your StarRez API server; This must be in the format of `https://starrezdomain.com/StarRezRest`)
    - STARREZ_API_USER (The username of the StarRez user that will be used for making certain API requests; By default, this user is only used for getting the StarRez API documentation)
    - STARREZ_API_KEY (The StarRez API key generated for the specified StarRez user)
-
-## How to Use this Repository
