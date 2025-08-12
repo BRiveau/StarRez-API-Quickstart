@@ -22,9 +22,9 @@
 
 ### Software Requirements
 
-- NodeJS (for monorepo/web development)
+- [NodeJS](https://nodejs.org/en/download) (for monorepo/web development)
 - NPM (for package management/monorepo work; **This is included with a NodeJS install**)
-- ASP.NET 9.0 SDK (for API development)
+- [ASP.NET 9.0 SDK](https://dotnet.microsoft.com/en-us/download) (for API development)
 - StarRez with API package
 
 ### StarRez Setup
