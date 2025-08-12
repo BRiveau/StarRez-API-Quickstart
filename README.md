@@ -2,6 +2,8 @@
 
 ## Introduction
 
+This repository is meant to allow for quick configuration and integration with the StarRez API. This is done through a reverse proxy and custom StarRez project, which allows for access to all StarRez API endpoints by default. Due to the presence of a custom StarRez project, it is extremely easy to develop custom StarRez API logic that extends the default capabilities of the API. The architecture and technologies used in this repository are also extremely modular, allowing development of additional applications that use any other modern programming language/framework.
+
 ### Technology Overview
 
 - NX Monorepo is used for improving the developer experience of working with many projects in a single location ([NX Documentation](https://nx.dev/getting-started/intro))
@@ -43,3 +45,7 @@
    - STARREZ_API_KEY (The StarRez API key generated for the specified StarRez user)
 
 ## How to Use this Repository
+
+### Serve Development API
+
+Run `dotenvx run -- npx nx serve reverse-proxy` to run the development version of the API, which will be hosted on `https://localhost:7040`. To access API documentation, navigate to `https://localhost:7040/docs`. To make requests to the API, use the default server URL and add the specified path to the end of the URL (for StarRez API requests, add `/starrez/` before the StarRez API path).
