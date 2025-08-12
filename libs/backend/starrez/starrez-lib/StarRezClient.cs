@@ -25,21 +25,14 @@ public class StarRezClient
         // Add production and development API URLs
         this.starrezApiUrls.Add("Development", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}Dev/services");
         this.starrezApiUrls.Add("Production", $"{Environment.GetEnvironmentVariable("STARREZ_API_URL") ?? ""}/services");
-
-        // Ensure that we are requesting json responses
-        this.client.DefaultRequestHeaders.Remove("Accept");
-        this.client.DefaultRequestHeaders.Add("Accept", "application/json");
-
-        // Configures default auth header for StarRez documentation requests
-        this.UpdateAuthHeader(Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
     }
 
     /// <summary>
     /// Allows for reassignment of the auth header used to make StarRez API requests
     /// </summary>
-    public void UpdateAuthHeader(string user, string apiKey)
+    public void UpdateAuthHeader(HttpRequestMessage request, string user, string apiKey)
     {
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+        request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
                 Convert.ToBase64String(
                   Encoding.ASCII.GetBytes(
                     $"{user}:{apiKey}"
@@ -48,12 +41,20 @@ public class StarRezClient
         );
     }
 
+    public void AcceptJson(HttpRequestMessage request)
+    {
+        request.Headers.Remove("Accept");
+        request.Headers.Add("Accept", "application/json");
+    }
+
     /// <summary>
     /// Gets StarRez API documentation and converts it into OpenAPI format
     /// </summary>
     public async Task<string> GetStarRezDocumentation(bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")].Replace("/services", "")}/swagger");
+        this.UpdateAuthHeader(request, Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
+        this.AcceptJson(request);
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
@@ -66,6 +67,8 @@ public class StarRezClient
     public async Task<Stream> GetStarRezTables(bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/tablelist.xml");
+        this.UpdateAuthHeader(request, Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
+        this.AcceptJson(request);
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
@@ -78,6 +81,8 @@ public class StarRezClient
     public async Task<Stream> GetStarRezTableAttributes(string tableName, bool? dev)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{this.starrezApiUrls[(dev ?? false ? "Development" : "Production")]}/databaseinfo/columnlist/{tableName}.xml");
+        this.UpdateAuthHeader(request, Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
+        this.AcceptJson(request);
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
@@ -99,15 +104,17 @@ public class StarRezClient
         {
             Content = requestBody
         };
+        this.UpdateAuthHeader(request, Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
+        this.AcceptJson(request);
         var response = await this.client.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStreamAsync();
     }
 
-    /*
-        public object MakeRequest(HttpMethod method, string endpointPath)
-        {
-
-        }
-        */
+    public async Task<HttpResponseMessage> MakeRequest(HttpRequestMessage request)
+    {
+        this.UpdateAuthHeader(request, Environment.GetEnvironmentVariable("STARREZ_API_USER") ?? "", Environment.GetEnvironmentVariable("STARREZ_API_KEY") ?? "");
+        this.AcceptJson(request);
+        return await this.client.SendAsync(request);
+    }
 }
