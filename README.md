@@ -1,109 +1,59 @@
-# StarrezApiQuickstart
+# Starrez Api Quickstart Guide
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+## Introduction
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+This repository is meant to allow for quick configuration and integration with the StarRez API. This is done through a reverse proxy and custom StarRez project, which allows for access to all StarRez API endpoints by default. Due to the presence of a custom StarRez project, it is extremely easy to develop custom StarRez API logic that extends the default capabilities of the API. The architecture and technologies used in this repository are also extremely modular, allowing development of additional applications that use any other modern programming language/framework.
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/js?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+### Technology Overview
 
-## Generate a library
+- NX Monorepo is used for improving the developer experience of working with many projects in a single location ([NX Documentation](https://nx.dev/getting-started/intro))
+- ASP.NET Core 9.0 is the framework used to construct the reverse proxy and internal StarRez API applications ([ASP.NET Core Documentation](https://learn.microsoft.com/en-us/aspnet/core/?view=aspnetcore-9.0))
+- YARP is the NuGet package used for managing the reverse proxy, allowing for a micro-services architecture on the backend ([YARP Documentation](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/getting-started?view=aspnetcore-9.0))
 
-```sh
-npx nx g @nx/js:lib packages/pkg1 --publishable --importPath=@my-org/pkg1
-```
+## Features
 
-## Run tasks
+- Preconfigured reverse-proxy application for quick integration with existing APIs
+- Request/response logging of all reverse-proxy requests using [Serilog](https://serilog.net/)
+- Template application for creating custom StarRez API logic
+- Self-hosted API documentation website using [Scalar](https://scalar.com/)
+- Updates StarRez API documentation to meet HTTP standards
+- Optionally include latest StarRez database schemas in API documentation website (significantly slows down initial page load)
+- Automatically generates API documentation using OpenAPI
 
-To build the library use:
+## Installation
 
-```sh
-npx nx build pkg1
-```
+### Software Requirements
 
-To run any task with Nx use:
+- [NodeJS](https://nodejs.org/en/download) (for monorepo/web development)
+- NPM (for package management/monorepo work; **This is included with a NodeJS install**)
+- [ASP.NET 9.0 SDK](https://dotnet.microsoft.com/en-us/download) (for API development)
+- StarRez with API package
 
-```sh
-npx nx <target> <project-name>
-```
+### StarRez Setup
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+1. Create permissions group for API access
+2. Generate API token for at least one user ([How to Create a StarRez API Token](https://support.starrez.com/hc/en-us/articles/208606766-Create-Token-for-REST-API-calls))
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+### Initial Setup
 
-## Versioning and releasing
+1. Fork this repository ([How to Fork a GitHub Repository](https://www.geeksforgeeks.org/git/how-to-fork-a-github-repository/))
+2. Run `npm i` from repository root to install all package dependencies
+3. Create `.env` and `.env.production` files ([Dotenvx](https://dotenvx.com/) is recommended for environment variable management) and set the following values:
+   - API_URL (The URL of the reverse proxy; For development, this should be `https://localhost:7040`)
+   - STARREZ_API_URL (The base URL of your StarRez API server; This must be in the format of `https://starrezdomain.com/StarRezRest`)
+   - STARREZ_API_USER (The username of the StarRez user that will be used for making certain API requests; By default, this user is only used for getting the StarRez API documentation)
+   - STARREZ_API_KEY (The StarRez API key generated for the specified StarRez user)
 
-To version and release the library use
+## How to Use this Repository
 
-```
-npx nx release
-```
+### Serve Development API
 
-Pass `--dry-run` to see what would happen without actually releasing the library.
+Run `dotenvx run -- npx nx serve reverse-proxy` to run the development version of the API, which will be hosted on `https://localhost:7040`. To access API documentation, navigate to `https://localhost:7040/docs`. To make requests to the API, use the default server URL and add the specified path to the end of the URL (for StarRez API requests, add `/starrez/` before the StarRez API path).
 
-[Learn more about Nx release &raquo;](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+### Deploy Production API
 
-## Keep TypeScript project references up to date
+Run `dotenvx run -f .env.production -- npx nx publish {ProjectName}`, replacing `{ProjectName}` with the name of the project you wish to deploy. This will build the specified project into the `dist` directory, and can be used with whatever hosting solution you are using.
 
-Nx automatically updates TypeScript [project references](https://www.typescriptlang.org/docs/handbook/project-references.html) in `tsconfig.json` files to ensure they remain accurate based on your project dependencies (`import` or `require` statements). This sync is automatically done when running tasks such as `build` or `typecheck`, which require updated references to function correctly.
+### Add New Projects
 
-To manually trigger the process to sync the project graph dependencies information to the TypeScript project references, run the following command:
-
-```sh
-npx nx sync
-```
-
-You can enforce that the TypeScript project references are always in the correct state when running in CI by adding a step to your CI job configuration that runs the following command:
-
-```sh
-npx nx sync:check
-```
-
-[Learn more about nx sync](https://nx.dev/reference/nx-commands#sync)
-
-## Set up CI!
-
-### Step 1
-
-To connect to Nx Cloud, run the following command:
-
-```sh
-npx nx connect
-```
-
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
-
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
-
-```sh
-npx nx g ci-workflow
-```
-
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/nx-api/js?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+If project is not using ASP.NET, see if it is supported by NX (NX natively supports Typescript, Angular, React, Vue, NodeJS, and Java as well as those listed at [NX Frameworks/Technologies](https://nx.dev/showcase/example-repos)). If the project type is supported by NX, follow the process to generate a new project in the NX documentation. If it is not supported by NX, you may be able to create the project, but it will need to be in a unique directory and will not be integrated with NX.

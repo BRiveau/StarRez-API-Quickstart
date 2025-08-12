@@ -3,6 +3,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Yarp.ReverseProxy.Configuration;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,9 +92,9 @@ builder.Services.AddReverseProxy()
 string logFilePath = $"../../logs/{DateTime.Now.ToString("MM-dd-yyyy")}-reverse-proxy.log"; // Sets output filename and directory
 string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}"; // Uses Serilog format to configure logging output styling
 Log.Logger = new LoggerConfiguration()
-  .Filter.ByIncludingOnly(le => (le.Level >= LogEventLevel.Warning)
-      || (le.Properties.ContainsKey("Custom")
-        && bool.Parse(le.Properties["Custom"].ToString())))
+  .Filter.ByIncludingOnly(logEvent => (logEvent.Level >= LogEventLevel.Warning)
+      || (logEvent.Properties.ContainsKey("Custom")
+        && bool.Parse(logEvent.Properties["Custom"].ToString())))
   .WriteTo.Console(outputTemplate: outputTemplate)
   .WriteTo.File(logFilePath,
       outputTemplate: outputTemplate)
@@ -155,13 +156,23 @@ app.MapReverseProxy(proxyPipeline =>
         var clusterId = proxyFeature.Route.Cluster?.ClusterId;
         var request = context.Request;
         var queryString = request.QueryString;
-        var authorization = request.Headers.Authorization.ToString();
+        var authorization = request.Headers.Authorization.ToString().Split(' ');
+        var authorizationType = authorization[0];
+        var authorizationData = string.Join(' ', authorization.Skip(1));
         var requestHeaders = request.Headers.ToDictionary();
         bool isDev = requestHeaders.ContainsKey("dev") && bool.Parse(requestHeaders["dev"]!);
         var userClaims = context.User.Claims.ToDictionary(claim => claim.Type, claim => claim.Value);
 
+        var userName = "Unauthenticated User";
+
+        // Add code here to update username (for logs) based on the data within the authentication method
+        if (authorizationType == "Basic")
+        {
+            userName = Encoding.ASCII.GetString(Convert.FromBase64String(authorizationData)).Split(':')[0];
+        }
+
         // Request Logging
-        Log.ForContext("Custom", true).Information($"{"User"} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
+        Log.ForContext("Custom", true).Information($"{userName} made {request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV)" : String.Empty)}");
 
         // Properly route to development or production API
         if (isDev && (proxyFeature.Route.Cluster?.Destinations.ContainsKey("development") ?? false))
@@ -178,7 +189,7 @@ app.MapReverseProxy(proxyPipeline =>
         var response = context.Response;
 
         // Response Logging
-        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {"User"} received response of {response.StatusCode}");
+        Log.ForContext("Custom", true).Information($"{request.Method} request to {request.Path}{queryString} {(isDev ? "(DEV) " : "")}by {userName} received response of {response.StatusCode}");
     });
 });
 
