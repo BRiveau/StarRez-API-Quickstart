@@ -132,7 +132,7 @@ var clusterConfig = builder.Configuration.GetSection("ReverseProxy:Clusters").Ge
 app.MapScalarApiReference("/docs", (options) =>
 {
     options.ProxyUrl = $"{Environment.GetEnvironmentVariable("API_URL") ?? ""}/scalar-proxy";
-    options.AddDocument("v1", "StarRez API", $"/starrez/documentation");
+    options.AddDocument("v1", "StarRez API", "/starrez/documentation");
     foreach (var cluster in clusterConfig)
     {
         var clusterName = cluster.Key;
