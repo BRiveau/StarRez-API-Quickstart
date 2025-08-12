@@ -49,3 +49,11 @@ This repository is meant to allow for quick configuration and integration with t
 ### Serve Development API
 
 Run `dotenvx run -- npx nx serve reverse-proxy` to run the development version of the API, which will be hosted on `https://localhost:7040`. To access API documentation, navigate to `https://localhost:7040/docs`. To make requests to the API, use the default server URL and add the specified path to the end of the URL (for StarRez API requests, add `/starrez/` before the StarRez API path).
+
+### Deploy Production API
+
+Run `dotenvx run -f .env.production -- npx nx publish {ProjectName}`, replacing `{ProjectName}` with the name of the project you wish to deploy. This will build the specified project into the `dist` directory, and can be used with whatever hosting solution you are using.
+
+### Add New Projects
+
+If project is not using ASP.NET, see if it is supported by NX (NX natively supports Typescript, Angular, React, Vue, NodeJS, and Java as well as those listed at [NX Frameworks/Technologies](https://nx.dev/showcase/example-repos)). If the project type is supported by NX, follow the process to generate a new project in the NX documentation. If it is not supported by NX, you may be able to create the project, but it will need to be in a unique directory and will not be integrated with NX.
